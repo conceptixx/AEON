@@ -1,0 +1,11 @@
+# 1) Änderungen prüfen
+git status
+
+# 2) Änderungen zum Commit vormerken
+git add -A
+
+# 3) Commit erstellen
+git commit -m "initial post - upload .md files"
+
+# 4) Auf GitHub hochladen (push)
+git push
