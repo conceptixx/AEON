@@ -17,7 +17,7 @@
 
 ## 🎯 Quick Start
 ```bash
-curl -fsSL https://get.aeon.dev | sudo bash
+curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash
 ```
 
 ## 📋 Requirements
