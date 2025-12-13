@@ -1,0 +1,114 @@
+{
+  "summary": {
+    "total_devices": 6,
+    "total_pis": 5,
+    "manager_count": 3,
+    "worker_count": 3,
+    "pi_managers": 3,
+    "pi_workers": 2,
+    "llm_workers": 1,
+    "host_workers": 0,
+    "fault_tolerance": 1,
+    "meets_requirements": true
+  },
+  "warnings": [],
+  "errors": [],
+  "assignments": [
+    {
+      "device": {
+        "ip": "192.168.1.100",
+        "hostname": "pi5-master-01",
+        "device_type": "raspberry_pi",
+        "model": "Raspberry Pi 5",
+        "ram_gb": 8,
+        "storage_type": "nvme",
+        "storage_size_gb": 512,
+        "network_speed_mbps": 1000,
+        "score": 163
+      },
+      "role": "manager",
+      "rank": 1,
+      "reason": "High score (163/170), rank #1"
+    },
+    {
+      "device": {
+        "ip": "192.168.1.101",
+        "hostname": "pi5-master-02",
+        "device_type": "raspberry_pi",
+        "model": "Raspberry Pi 5",
+        "ram_gb": 8,
+        "storage_type": "nvme",
+        "storage_size_gb": 256,
+        "network_speed_mbps": 1000,
+        "score": 158
+      },
+      "role": "manager",
+      "rank": 2,
+      "reason": "High score (158/170), rank #2"
+    },
+    {
+      "device": {
+        "ip": "192.168.1.102",
+        "hostname": "pi4-node-01",
+        "device_type": "raspberry_pi",
+        "model": "Raspberry Pi 4",
+        "ram_gb": 8,
+        "storage_type": "ssd",
+        "storage_size_gb": 256,
+        "network_speed_mbps": 1000,
+        "score": 124
+      },
+      "role": "manager",
+      "rank": 3,
+      "reason": "High score (124/170), rank #3"
+    },
+    {
+      "device": {
+        "ip": "192.168.1.103",
+        "hostname": "pi4-node-02",
+        "device_type": "raspberry_pi",
+        "model": "Raspberry Pi 4",
+        "ram_gb": 4,
+        "storage_type": "ssd",
+        "storage_size_gb": 128,
+        "network_speed_mbps": 1000,
+        "score": 96
+      },
+      "role": "worker",
+      "rank": 4,
+      "reason": "Lower score (96/170), rank #4"
+    },
+    {
+      "device": {
+        "ip": "192.168.1.104",
+        "hostname": "pi4-node-03",
+        "device_type": "raspberry_pi",
+        "model": "Raspberry Pi 4",
+        "ram_gb": 4,
+        "storage_type": "sd",
+        "storage_size_gb": 64,
+        "network_speed_mbps": 100,
+        "score": 69
+      },
+      "role": "worker",
+      "rank": 5,
+      "reason": "Lower score (69/170), rank #5"
+    },
+    {
+      "device": {
+        "ip": "192.168.1.200",
+        "hostname": "workstation-gpu",
+        "device_type": "llm_computer",
+        "model": "AMD Ryzen 9 7950X",
+        "ram_gb": 128,
+        "storage_type": "nvme",
+        "storage_size_gb": 2048,
+        "network_speed_mbps": 2500,
+        "score": 0
+      },
+      "role": "worker",
+      "rank": 0,
+      "reason": "LLM computer - always worker (GPU workload)"
+    }
+  ]
+}
