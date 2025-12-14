@@ -686,21 +686,54 @@ trap 'handle_error $LINENO' ERR
 main() {
     local start_time=$(date +%s)
     
-    print_banner
-    
+    print_banner    
     run_preflight_checks || exit 1
+    sleep 10
+
+    print_banner    
     run_discovery_phase || exit 1
+    sleep 10
+
+    print_banner    
     run_hardware_detection || exit 1
+    sleep 10
+
+    print_banner    
     run_validation || exit 1
+    sleep 10
+
+    print_banner    
     run_role_assignment || exit 1
+    sleep 10
+
+    print_banner    
     run_installation || exit 1
+    sleep 10
+
+    print_banner    
     run_user_setup || exit 1
+    sleep 10
+
+    print_banner    
     run_reboot_phase || true
+    sleep 10
+
+    print_banner    
     run_swarm_setup || exit 1
+    sleep 10
+
+    print_banner    
     run_report_generation || true
+    sleep 10
+
+    print_banner    
     show_security_warning || true
+    sleep 10
+
+    print_banner    
     print_completion
-    
+    sleep 10
+  
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
