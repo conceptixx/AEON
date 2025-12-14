@@ -3,16 +3,33 @@
 # AEON Bootstrap Installer
 # File: bootstrap.sh
 # Version: 0.1.0
-#
-# Purpose: One-command installation of AEON
-#
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash
-#   
-# Or manually:
-#   wget https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh
-#   sudo bash bootstrap.sh
 ################################################################################
+
+# ============================================================================
+# SELF-EXTRACTION FOR PIPED EXECUTION
+# ============================================================================
+
+if [[ "${AEON_BOOTSTRAP_REEXEC:-}" != "true" ]]; then
+    if [[ ! -t 0 ]]; then
+        TEMP_SCRIPT="/tmp/aeon-bootstrap-$$.sh"
+        
+        # Read script content and save to temp
+        cat > "$TEMP_SCRIPT"
+        chmod +x "$TEMP_SCRIPT"
+        
+        # Re-execute from temp file
+        AEON_BOOTSTRAP_REEXEC=true exec "$TEMP_SCRIPT" "$@"
+        
+        # Cleanup on failure
+        rm -f "$TEMP_SCRIPT"
+        exit 1
+    fi
+fi
+
+# Cleanup temp file on exit (if re-executed)
+if [[ "${AEON_BOOTSTRAP_REEXEC:-}" == "true" ]]; then
+    trap 'rm -f "/tmp/aeon-bootstrap-$$.sh"' EXIT
+fi
 
 set -euo pipefail
 
