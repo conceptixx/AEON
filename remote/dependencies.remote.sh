@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # AEON Dependency Installer
-# File: remote/install_dependencies.sh
+# File: remote/dependencies.remote.sh
 # Version: 0.1.0
 #
 # Purpose: Comprehensive dependency installation script executed on each

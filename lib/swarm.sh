@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # AEON Docker Swarm Setup Module
-# File: lib/07-swarm.sh
+# File: lib/swarm.sh
 # Version: 0.1.0
 #
 # Purpose: Initialize and configure Docker Swarm cluster across all devices

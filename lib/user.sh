@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # AEON User Management System
-# File: lib/aeon_user.sh
+# File: lib/user.sh
 # Version: 0.1.0
 #
 # Purpose: Create and manage the AEON system user with controlled sudo access
@@ -32,41 +32,23 @@ AEON_DIR="/opt/aeon"
 AEON_ENV_FILE="$AEON_DIR/.aeon.env"
 SUDOERS_FILE="/etc/sudoers.d/aeon"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
-
 # ============================================================================
-# LOGGING
+# DEPENDENCIES
 # ============================================================================
 
-log() {
-    local level="$1"
-    shift
-    local message="$*"
+# Auto-source common.sh if not already loaded
+if [[ -z "${AEON_COMMON_LOADED:-}" ]]; then
+    SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
     
-    case "$level" in
-        ERROR)
-            echo -e "${RED}❌ $message${NC}" >&2
-            ;;
-        WARN)
-            echo -e "${YELLOW}⚠️  $message${NC}"
-            ;;
-        INFO)
-            echo -e "${CYAN}ℹ️  $message${NC}"
-            ;;
-        SUCCESS)
-            echo -e "${GREEN}✅ $message${NC}"
-            ;;
-        STEP)
-            echo -e "${BOLD}${CYAN}▶ $message${NC}"
-            ;;
-    esac
-}
+    if [[ -f "$SCRIPT_DIR/common.sh" ]]; then
+        source "$SCRIPT_DIR/common.sh"
+    elif [[ -f "/opt/aeon/lib/common.sh" ]]; then
+        source "/opt/aeon/lib/common.sh"
+    else
+        echo "ERROR: Cannot find common.sh" >&2
+        return 1 2>/dev/null || exit 1
+    fi
+fi
 
 # ============================================================================
 # PASSWORD GENERATION

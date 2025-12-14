@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # AEON Synchronized Reboot Module
-# File: lib/06-reboot.sh
+# File: lib/reboot.sh
 # Version: 0.1.0
 #
 # Purpose: Orchestrate synchronized cluster reboot to prevent split-brain
