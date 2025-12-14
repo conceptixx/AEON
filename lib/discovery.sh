@@ -663,9 +663,18 @@ automated_discovery() {
     
     # Run discovery steps
     discover_network_devices "$network_range" || return 1
+    
+    print_banner    
     test_ssh_accessibility "$ssh_user" "$ssh_password" || return 1
+    sleep 10
+
+    print_banner    
     classify_devices || return 1
+    sleep 10
+
+    print_banner    
     save_discovered_devices "$output_file" || return 1
+    sleep 10
     
     return 0
 }
