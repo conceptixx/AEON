@@ -226,47 +226,74 @@ run_preflight_checks() {
 }
 
 # ============================================================================
-# PHASE 2: NETWORK DISCOVERY
+# NETWORK AUTO-DETECTION
 # ============================================================================
 
-#
-# run_discovery_phase
-# Discover and classify all devices on network
-#
-run_discovery_phase() {
-    print_header "Phase 2: Network Discovery"
+get_network_range() {
+    # Auto-detect network range from device IP
+    local ip=""
     
-    # discovery.sh already sourced at top
+    # Try to get IP
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
     
-    echo ""
-    read -p "Enter network range [${DEFAULT_NETWORK_RANGE}]: " NETWORK_RANGE
-    NETWORK_RANGE="${NETWORK_RANGE:-$DEFAULT_NETWORK_RANGE}"
-    echo ""
+    if [[ -z "$ip" ]]; then
+        ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
+    fi
     
-    read -p "Enter default SSH user [pi]: " DEFAULT_USER
-    DEFAULT_USER="${DEFAULT_USER:-pi}"
-    echo ""
-    
-    read -sp "Enter default SSH password: " DEFAULT_PASSWORD
-    echo ""
-    echo ""
-    
-    export AEON_LOG_DIR="$LOG_DIR"
-    
-    run_discovery "$NETWORK_RANGE" "$DEFAULT_USER" "$DEFAULT_PASSWORD" "$DATA_DIR/discovered_devices.json"
-    
-    if [[ $? -ne 0 ]]; then
-        log ERROR "Discovery failed"
+    if [[ -z "$ip" ]]; then
+        log ERROR "Could not detect IP address"
         return 1
     fi
     
-    echo ""
-    log SUCCESS "Network discovery complete"
-    echo ""
+    log DEBUG "Detected IP: $ip"
     
+    # Extract first 3 octets
+    local network_prefix=$(echo "$ip" | cut -d. -f1-3)
+    
+    # Build CIDR range
+    local network_range="${network_prefix}.0/24"
+    
+    log INFO "Auto-detected network range: $network_range"
+    echo "$network_range"
     return 0
 }
 
+run_discovery_phase() {
+    print_header "Phase 2: Network Discovery"
+    
+    # Auto-detect network
+    local NETWORK_RANGE=$(get_network_range)
+    
+    if [[ -z "$NETWORK_RANGE" ]]; then
+        log WARN "Failed to auto-detect network, using default"
+        NETWORK_RANGE="$DEFAULT_NETWORK_RANGE"
+    fi
+    
+    log SUCCESS "Using network range: $NETWORK_RANGE"
+    
+    # Use predefined credentials
+    local DEFAULT_USER="pi"
+    local DEFAULT_PASSWORD="raspberry"
+    
+    log INFO "SSH Discovery Configuration:"
+    log INFO "  - Default user: pi"
+    log INFO "  - Default password: raspberry"
+    log INFO "  - Will also try: ubuntu/ubuntu, aeon-llm/raspberry, aeon-host/raspberry"
+    log WARN "IMPORTANT: Change all default passwords after cluster setup!"
+    
+    echo ""
+    
+    # Run automated_discovery
+    automated_discovery "$NETWORK_RANGE" "$DEFAULT_USER" "$DEFAULT_PASSWORD" "$DATA_DIR/discovered_devices.json"
+    
+    if [[ $? -ne 0 ]]; then
+        log ERROR "Network discovery failed"
+        return 1
+    fi
+    
+    log SUCCESS "Phase 2: Network Discovery complete"
+    return 0
+}
 # ============================================================================
 # PHASE 3: HARDWARE DETECTION
 # ============================================================================
@@ -601,6 +628,35 @@ print_completion() {
     echo ""
 }
 
+# At the end of main() function, before final success message:
+
+show_security_warning() {
+    echo ""
+    print_header "🔒 IMPORTANT SECURITY NOTICE"
+    echo ""
+    
+    log WARN "DEFAULT PASSWORDS IN USE!"
+    echo ""
+    log INFO "All devices are currently using default password: 'raspberry'"
+    log INFO ""
+    log INFO "You MUST change passwords on all devices:"
+    log INFO "  1. SSH to each device"
+    log INFO "  2. Run: passwd"
+    log INFO "  3. Set a strong password"
+    log INFO ""
+    log INFO "Devices to update:"
+    
+    # List all discovered devices
+    if [[ -f "$DATA_DIR/discovered_devices.json" ]]; then
+        jq -r '.devices[] | "  - \(.ip) (\(.hostname)) - user: \(.ssh_user)"' \
+            "$DATA_DIR/discovered_devices.json"
+    fi
+    
+    echo ""
+    log WARN "Cluster security depends on changing these passwords!"
+    echo ""
+}
+
 # ============================================================================
 # ERROR HANDLING
 # ============================================================================
@@ -646,7 +702,7 @@ main() {
     run_reboot_phase || true
     run_swarm_setup || exit 1
     run_report_generation || true
-    
+    show_security_warning || true
     print_completion
     
     local end_time=$(date +%s)

@@ -278,31 +278,12 @@ show_next_steps() {
     echo -e "${BOLD}${GREEN}════════════════════════════════════════════════════════${NC}"
     echo ""
     
-    echo -e "${BOLD}Installation Details:${NC}"
-    echo -e "  • Location: ${CYAN}$INSTALL_DIR${NC}"
-    echo -e "  • Main Script: ${CYAN}$INSTALL_DIR/aeon-go.sh${NC}"
+    log INFO "Starting AEON installation..."
     echo ""
     
-    echo -e "${BOLD}Next Steps:${NC}"
-    echo ""
-    echo -e "  ${BOLD}1. Start AEON Installation:${NC}"
-    echo -e "     ${CYAN}cd $INSTALL_DIR${NC}"
-    echo -e "     ${CYAN}sudo bash aeon-go.sh${NC}"
-    echo ""
-    echo -e "  ${BOLD}2. Or run directly:${NC}"
-    echo -e "     ${CYAN}sudo bash $INSTALL_DIR/aeon-go.sh${NC}"
-    echo ""
-    
-    echo -e "${BOLD}Requirements:${NC}"
-    echo -e "  • Minimum 3 Raspberry Pis on local network"
-    echo -e "  • SSH enabled on all devices"
-    echo -e "  • Network connectivity between devices"
-    echo ""
-    
-    echo -e "${BOLD}Documentation:${NC}"
-    echo -e "  • GitHub: ${CYAN}https://github.com/conceptixx/AEON${NC}"
-    echo -e "  • Local Docs: ${CYAN}$INSTALL_DIR/docs/${NC}"
-    echo ""
+    # Auto-launch aeon-go.sh
+    cd "$INSTALL_DIR"
+    exec bash aeon-go.sh
 }
 
 # ============================================================================

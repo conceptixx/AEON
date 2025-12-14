@@ -57,23 +57,10 @@ declare -g VALIDATION_ERRORS=0
 # ============================================================================
 
 validate_raspberry_pi_count() {
-    # Check minimum Raspberry Pi count
-    #
-    # Arguments:
-    #   $1 - hw_profiles.json file path
-    #
-    # Returns:
-    #   0 if sufficient Pis
-    #   1 if insufficient
-    #
-    # Example:
-    #   validate_raspberry_pi_count "$DATA_DIR/hw_profiles.json"
-    
     local hw_file="$1"
     
     log STEP "Validating Raspberry Pi count..."
     
-    # Count Raspberry Pis
     local pi_count=$(jq '[.devices[] | select(.device_type == "raspberry_pi")] | length' \
         "$hw_file" 2>/dev/null)
     
@@ -84,19 +71,22 @@ validate_raspberry_pi_count() {
     fi
     
     if [[ $pi_count -lt $MIN_RASPBERRY_PIS ]]; then
-        log ERROR "Insufficient Raspberry Pis: $pi_count found, minimum $MIN_RASPBERRY_PIS required"
+        log WARN "Found $pi_count Raspberry Pi(s) - below minimum of $MIN_RASPBERRY_PIS for production"
         echo ""
-        log INFO "AEON requires at least $MIN_RASPBERRY_PIS Raspberry Pis for a fault-tolerant cluster"
-        log INFO "Current cluster has: $pi_count Raspberry Pi(s)"
+        log INFO "SETUP MODE: You can proceed with setup, but cluster cannot start until requirements are met"
+        log INFO ""
+        log INFO "Current: $pi_count Raspberry Pi(s)"
+        log INFO "Required for cluster start: $MIN_RASPBERRY_PIS Raspberry Pis"
+        log INFO ""
+        log INFO "Next steps:"
+        log INFO "  1. Complete setup on this device"
+        log INFO "  2. Add more Raspberry Pis to network"
+        log INFO "  3. Run cluster start when requirements are met"
         echo ""
-        log INFO "To fix this:"
-        log INFO "  1. Add more Raspberry Pis to your network"
-        log INFO "  2. Ensure they are powered on and accessible"
-        log INFO "  3. Ensure SSH is enabled on all Pis"
-        log INFO "  4. Re-run AEON installation"
-        echo ""
-        ((VALIDATION_ERRORS++))
-        return 1
+        
+        # Warning, not error - allow setup to continue
+        ((VALIDATION_WARNINGS++))
+        return 0
     fi
     
     log SUCCESS "Raspberry Pi count: $pi_count (minimum: $MIN_RASPBERRY_PIS)"

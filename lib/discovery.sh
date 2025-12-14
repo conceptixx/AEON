@@ -28,7 +28,8 @@ SSH_RETRIES=2                      # SSH retry attempts
 PARALLEL_SCAN_JOBS=50              # Parallel ping jobs
 
 # Common SSH users to try
-DEFAULT_SSH_USERS=("pi" "ubuntu" "aeon" "aeon-llm" "aeon-host")
+DEFAULT_SSH_USERS=("pi" "ubuntu" "aeon-llm" "aeon-host" "aeon")
+
 
 # Global arrays
 DISCOVERED_IPS=()
@@ -236,9 +237,10 @@ find_ssh_credentials() {
         fi
     fi
     
-    # Try common user/password combinations
-    local common_passwords=("raspberry" "ubuntu" "aeon" "pi")
-    
+    # All devices MUST use "raspberry" as password initially
+    # User will be prompted to change after setup
+    local common_passwords=("raspberry" "ubuntu" "pi" "aeon")
+
     for user in "${DEFAULT_SSH_USERS[@]}"; do
         for password in "${common_passwords[@]}"; do
             log DEBUG "Testing $user:$password for $ip..."
