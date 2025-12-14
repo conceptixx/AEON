@@ -1,4 +1,4 @@
-   ![AEON Logo](.github/assets/logo/aeon_app_icon_final_v3_1024x1024.png)
+   ![AEON Logo](/.github/assets/logo/aeon_app_icon_final_v3_1024x1024.png)
 
    # AEON - Autonomous Evolving Orchestration Network
 

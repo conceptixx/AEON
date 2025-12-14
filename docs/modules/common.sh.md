@@ -1,4 +1,4 @@
-![AEON Banner](.github/assets/aeon_banner_v2_2400x600.png)
+![AEON Banner](/.github/assets/aeon_banner_v2_2400x600.png)
 
 # common.sh - AEON Core Utilities Module
 
