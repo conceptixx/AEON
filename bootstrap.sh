@@ -118,6 +118,7 @@ check_root() {
         echo ""
         exit 1
     fi
+    log SUCCESS "check_root"
 }
 
 #
@@ -130,7 +131,7 @@ check_prerequisites() {
     # Check if already installed
     if [[ -d "$INSTALL_DIR" ]]; then
         log WARN "AEON is already installed at $INSTALL_DIR"
-        read -p "Reinstall? [y/N] " -n 1 -r
+        read -p "Reinstall? [y/N] " -n 60 -r
         echo ""
         
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
