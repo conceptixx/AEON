@@ -18,24 +18,6 @@
 set -euo pipefail
 
 # ============================================================================
-# CONFIGURATION
-# ============================================================================
-
-DISCOVERY_TIMEOUT=300              # Max time for discovery (5 min)
-PING_TIMEOUT=1                     # Ping timeout per host
-SSH_TIMEOUT=5                      # SSH connection timeout
-SSH_RETRIES=2                      # SSH retry attempts
-PARALLEL_SCAN_JOBS=50              # Parallel ping jobs
-
-# Common SSH users to try
-DEFAULT_SSH_USERS=("pi" "ubuntu" "aeon-llm" "aeon-host" "aeon")
-
-
-# Global arrays
-DISCOVERED_IPS=()
-ACCESSIBLE_DEVICES=()
-
-# ============================================================================
 # DEPENDENCIES
 # ============================================================================
 
@@ -55,12 +37,29 @@ if [[ -z "${AEON_COMMON_LOADED:-}" ]]; then
 fi
 
 # ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+DISCOVERY_TIMEOUT=300              # Max time for discovery (5 min)
+PING_TIMEOUT=1                     # Ping timeout per host
+SSH_TIMEOUT=5                      # SSH connection timeout
+SSH_RETRIES=2                      # SSH retry attempts
+PARALLEL_SCAN_JOBS=50              # Parallel ping jobs
+
+# Common SSH users to try
+DEFAULT_SSH_USERS=("pi" "ubuntu" "aeon-llm" "aeon-host" "aeon")
+
+# Global arrays
+DISCOVERED_IPS=()
+ACCESSIBLE_DEVICES=()
+
+# ============================================================================
 # NETWORK SCANNING
 # ============================================================================
 
 #
 # check_scan_tools
-# 
+# Checks for network scanning tools and sets SCAN_METHOD
 #
 check_scan_tools() {
     log STEP "Checking for network scanning tools..."
@@ -81,13 +80,13 @@ check_scan_tools() {
 }
 
 #
-# scan_network_nmap
-# 
+# scan_network_nmap $network_range
+# Fast network scan using nmap
 #
 scan_network_nmap() {
     local network_range="$1"
     
-    log INFO "Scanning network with nmap: $network_range"
+    >&2 log INFO "Scanning network with nmap: $network_range"
     
     # Use nmap for fast host discovery
     local scan_result=$(nmap -sn -T4 "$network_range" -oG - 2>/dev/null | \
@@ -102,13 +101,14 @@ scan_network_nmap() {
 }
 
 #
-# scan_network_ping $network_reange
-#
+# scan_network_ping $network_range
+# Fallback ping sweep for network scanning
 #
 scan_network_ping() {
     local network_range="$1"
     
-    log INFO "Scanning network with ping sweep: $network_range"
+    # Send logs to stderr to avoid contaminating stdout
+    >&2 log INFO "Scanning network with ping sweep: $network_range"
     
     # Extract network prefix (e.g., 192.168.1 from 192.168.1.0/24)
     local network_prefix=$(echo "$network_range" | cut -d'/' -f1 | rev | cut -d'.' -f2- | rev)
@@ -118,12 +118,11 @@ scan_network_ping() {
     
     # For /24, scan .1 to .254
     if [[ "$cidr" == "24" ]]; then
-        log INFO "Ping sweep ${network_prefix}.1-254 (this may take a while)..."
+        >&2 log INFO "Ping sweep ${network_prefix}.1-254 (this may take a while)..."
         
-        local alive_hosts=()
         local self_ip=$(hostname -I | awk '{print $1}')
         
-        # Parallel ping sweep
+        # Parallel ping sweep - only IPs go to stdout
         for i in $(seq 1 254); do
             (
                 local ip="${network_prefix}.${i}"
@@ -142,14 +141,14 @@ scan_network_ping() {
         
         wait
     else
-        log ERROR "Only /24 networks supported for ping sweep"
+        >&2 log ERROR "Only /24 networks supported for ping sweep"
         return 1
     fi
 }
 
 #
-# discover_network_devices $network_reange
-#
+# discover_network_devices $network_range
+# Main network discovery function
 #
 discover_network_devices() {
     local network_range="${1:-192.168.1.0/24}"
@@ -173,22 +172,19 @@ discover_network_devices() {
             ;;
     esac
     
-    # Store in global array
+    # Store in global array (excluding self - we'll add it later if accessible)
     DISCOVERED_IPS=($(echo "$discovered" | sort -V))
     
     local count=${#DISCOVERED_IPS[@]}
     
-    if [[ $count -eq 0 ]]; then
-        log ERROR "No devices found on network $network_range"
-        return 1
-    fi
-    
-    log SUCCESS "Found $count device(s) on network"
+    log SUCCESS "Found $count device(s) on network (excluding this device)"
     
     # Display discovered IPs
-    for ip in "${DISCOVERED_IPS[@]}"; do
-        log INFO "  • $ip"
-    done
+    if [[ $count -gt 0 ]]; then
+        for ip in "${DISCOVERED_IPS[@]}"; do
+            log INFO "  • $ip"
+        done
+    fi
     
     return 0
 }
@@ -199,7 +195,7 @@ discover_network_devices() {
 
 #
 # test_ssh_connection $ip $user $password
-#
+# Test SSH connection to a single device
 #
 test_ssh_connection() {
     local ip="$1"
@@ -219,8 +215,8 @@ test_ssh_connection() {
 }
 
 #
-# find_ssh_credentials $ip $user $password
-#
+# find_ssh_credentials $ip $custom_user $custom_password
+# Find working SSH credentials for a device
 #
 find_ssh_credentials() {
     local ip="$1"
@@ -240,7 +236,7 @@ find_ssh_credentials() {
     # All devices MUST use "raspberry" as password initially
     # User will be prompted to change after setup
     local common_passwords=("raspberry" "ubuntu" "pi" "aeon")
-
+    
     for user in "${DEFAULT_SSH_USERS[@]}"; do
         for password in "${common_passwords[@]}"; do
             log DEBUG "Testing $user:$password for $ip..."
@@ -257,7 +253,7 @@ find_ssh_credentials() {
 
 #
 # test_ssh_accessibility $user $password
-#
+# Test SSH access to all discovered devices (and current device)
 #
 test_ssh_accessibility() {
     local user="${1:-}"
@@ -265,90 +261,160 @@ test_ssh_accessibility() {
     
     print_header "SSH Connectivity Testing"
     
-    log STEP "Testing SSH access to ${#DISCOVERED_IPS[@]} device(s)..."
+    # Get current device info
+    local self_ip=$(hostname -I | awk '{print $1}')
+    local self_hostname=$(hostname)
     
-    if [[ -z "$user" ]] || [[ -z "$password" ]]; then
-        log WARN "No credentials provided, will try common defaults"
+    log INFO "Current device: $self_hostname ($self_ip)"
+    echo ""
+    
+    # First, try to add current device
+    log STEP "Testing SSH access to current device..."
+    
+    local self_credentials=""
+    self_credentials=$(find_ssh_credentials "$self_ip" "$user" "$password")
+    
+    if [[ $? -eq 0 ]]; then
+        log SUCCESS "Current device is SSH accessible (${self_credentials%%:*})"
+        ACCESSIBLE_DEVICES+=("${self_ip}:${self_credentials}")
+    else
+        log WARN "Cannot SSH to current device - this may cause issues"
+        log INFO "Trying to continue anyway..."
     fi
     
-    local accessible_count=0
-    local tested_count=0
+    echo ""
     
-    for ip in "${DISCOVERED_IPS[@]}"; do
-        ((tested_count++))
+    # Now test discovered devices
+    if [[ ${#DISCOVERED_IPS[@]} -eq 0 ]]; then
+        log INFO "No other devices found on network"
+    else
+        log STEP "Testing SSH access to ${#DISCOVERED_IPS[@]} discovered device(s)..."
         
-        printf "\r  Testing [$tested_count/${#DISCOVERED_IPS[@]}] $ip..."
-        
-        local credentials=""
-        credentials=$(find_ssh_credentials "$ip" "$user" "$password")
-        
-        if [[ $? -eq 0 ]]; then
-            echo ""  # New line for log
-            log SUCCESS "[$ip] SSH accessible (${credentials%%:*})"
-            ACCESSIBLE_DEVICES+=("${ip}:${credentials}")
-            ((accessible_count++))
-        else
-            echo ""  # New line for log
-            log WARN "[$ip] SSH not accessible"
+        if [[ -z "$user" ]] || [[ -z "$password" ]]; then
+            log INFO "Will try common default credentials"
         fi
-    done
+        
+        local tested_count=0
+        local remote_accessible=0
+        
+        for ip in "${DISCOVERED_IPS[@]}"; do
+            ((tested_count++))
+            
+            printf "\r  Testing [$tested_count/${#DISCOVERED_IPS[@]}] $ip..."
+            
+            local credentials=""
+            credentials=$(find_ssh_credentials "$ip" "$user" "$password")
+            
+            if [[ $? -eq 0 ]]; then
+                echo ""  # New line for log
+                log SUCCESS "[$ip] SSH accessible (${credentials%%:*})"
+                ACCESSIBLE_DEVICES+=("${ip}:${credentials}")
+                ((remote_accessible++))
+            else
+                echo ""  # New line for log
+                log WARN "[$ip] SSH not accessible"
+            fi
+        done
+        
+        echo ""  # New line after progress
+    fi
     
-    echo ""  # New line after progress
+    # Summary
+    local total_accessible=${#ACCESSIBLE_DEVICES[@]}
     
-    if [[ $accessible_count -eq 0 ]]; then
-        log ERROR "No devices accessible via SSH"
+    if [[ $total_accessible -eq 0 ]]; then
+        log ERROR "No devices accessible via SSH (including this one)"
+        echo ""
         log INFO "Please ensure:"
-        log INFO "  • SSH is enabled on devices"
-        log INFO "  • Correct username/password provided"
-        log INFO "  • Firewall allows SSH (port 22)"
+        log INFO "  • SSH is enabled: sudo systemctl enable ssh && sudo systemctl start ssh"
+        log INFO "  • Password is set to 'raspberry': echo 'pi:raspberry' | sudo chpasswd"
+        log INFO "  • Firewall allows SSH: sudo ufw allow 22/tcp"
+        echo ""
         return 1
     fi
     
-    log SUCCESS "$accessible_count device(s) accessible via SSH"
+    # Determine setup mode
+    local self_only=false
+    if [[ $total_accessible -eq 1 ]]; then
+        # Check if it's only self
+        local first_device="${ACCESSIBLE_DEVICES[0]}"
+        local first_ip=$(echo "$first_device" | cut -d: -f1)
+        
+        if [[ "$first_ip" == "$self_ip" ]]; then
+            self_only=true
+        fi
+    fi
+    
+    if [[ "$self_only" == true ]]; then
+        log WARN "Only current device is accessible via SSH"
+        echo ""
+        log INFO "═══════════════════════════════════════════════════════════"
+        log INFO "  SINGLE-DEVICE SETUP MODE"
+        log INFO "═══════════════════════════════════════════════════════════"
+        echo ""
+        log INFO "Setup will continue on this device only."
+        log INFO ""
+        log INFO "IMPORTANT:"
+        log INFO "  • Cluster requires minimum 3 Raspberry Pis"
+        log INFO "  • Current setup: 1 device"
+        log INFO "  • Cluster services will NOT start automatically"
+        log INFO ""
+        log INFO "Next steps after setup:"
+        log INFO "  1. Add more Raspberry Pis to your network"
+        log INFO "  2. Ensure SSH is enabled with password 'raspberry'"
+        log INFO "  3. Use AEON management interface to add devices"
+        log INFO "  4. Start cluster when requirements are met"
+        echo ""
+        log INFO "═══════════════════════════════════════════════════════════"
+        echo ""
+    else
+        log SUCCESS "SSH access confirmed for $total_accessible device(s)"
+        
+        # Count how many are self vs remote
+        local remote_count=$((total_accessible - 1))
+        if echo "${ACCESSIBLE_DEVICES[@]}" | grep -q "$self_ip"; then
+            log INFO "  • Current device: 1"
+            log INFO "  • Remote devices: $remote_count"
+        else
+            log INFO "  • Remote devices: $total_accessible"
+        fi
+    fi
     
     return 0
 }
 
 # ============================================================================
-# DEVICE TYPE DETECTION
+# DEVICE CLASSIFICATION
 # ============================================================================
 
 #
 # detect_device_type $ip $user $password
-#
+# Detect what type of device this is
 #
 detect_device_type() {
     local ip="$1"
     local user="$2"
     local password="$3"
     
-    # Check /proc/cpuinfo for Raspberry Pi
-    local is_raspberry_pi=$(sshpass -p "$password" ssh \
+    # Check if Raspberry Pi
+    local device_check=$(sshpass -p "$password" ssh \
         -o StrictHostKeyChecking=no \
         -o ConnectTimeout="$SSH_TIMEOUT" \
-        "${user}@${ip}" \
-        "grep -qi 'Raspberry' /proc/cpuinfo && echo 'yes' || echo 'no'" 2>/dev/null)
+        "${user}@${ip}" "cat /proc/device-tree/model 2>/dev/null" 2>/dev/null || echo "unknown")
     
-    if [[ "$is_raspberry_pi" == "yes" ]]; then
+    if echo "$device_check" | grep -qi "raspberry"; then
         echo "raspberry_pi"
         return 0
     fi
     
-    # Check hostname for conventions
+    # Check hostname for LLM indicator
     local hostname=$(sshpass -p "$password" ssh \
         -o StrictHostKeyChecking=no \
         -o ConnectTimeout="$SSH_TIMEOUT" \
-        "${user}@${ip}" "hostname" 2>/dev/null)
+        "${user}@${ip}" "hostname" 2>/dev/null || echo "unknown")
     
-    # LLM computer naming convention
-    if [[ "$hostname" =~ ^aeon-llm ]]; then
+    if echo "$hostname" | grep -qi "llm"; then
         echo "llm_computer"
-        return 0
-    fi
-    
-    # Host computer naming convention  
-    if [[ "$hostname" =~ ^aeon-host ]]; then
-        echo "host_computer"
         return 0
     fi
     
@@ -359,12 +425,13 @@ detect_device_type() {
 
 #
 # classify_devices
-# 
+# Classify all accessible devices
 #
 classify_devices() {
     print_header "Device Classification"
     
     log STEP "Classifying ${#ACCESSIBLE_DEVICES[@]} device(s)..."
+    echo ""
     
     local pi_count=0
     local llm_count=0
@@ -379,35 +446,43 @@ classify_devices() {
         
         case "$device_type" in
             raspberry_pi)
-                log INFO "[$ip] Raspberry Pi"
+                log INFO "  [$ip] Raspberry Pi"
                 ((pi_count++))
                 ;;
             llm_computer)
-                log INFO "[$ip] LLM Computer"
+                log INFO "  [$ip] LLM Computer"
                 ((llm_count++))
                 ;;
             host_computer)
-                log INFO "[$ip] Host Computer"
+                log INFO "  [$ip] Host Computer"
                 ((host_count++))
                 ;;
         esac
     done
     
     echo ""
-    log SUCCESS "Classification complete:"
+    log SUCCESS "Device Classification:"
     log INFO "  • Raspberry Pis: $pi_count"
     log INFO "  • LLM Computers: $llm_count"
     log INFO "  • Host Computers: $host_count"
     echo ""
     
-    # Check minimum requirements
+    # Validate minimum requirements (warning only, not error)
     if [[ $pi_count -lt 3 ]]; then
-        log ERROR "Minimum 3 Raspberry Pis required (found $pi_count)"
-        log INFO "AEON requires at least 3 Raspberry Pis for manager quorum"
-        return 1
+        log WARN "Found $pi_count Raspberry Pi(s) - below minimum of 3 for production cluster"
+        echo ""
+        log INFO "SETUP MODE: You can proceed with setup"
+        log INFO ""
+        log INFO "Current: $pi_count Raspberry Pi(s)"
+        log INFO "Required for cluster start: 3 Raspberry Pis minimum"
+        log INFO ""
+        log INFO "Cluster services will be configured but not started."
+        log INFO "Add more devices later via management interface."
+        echo ""
+    else
+        log SUCCESS "Minimum requirements met ($pi_count Raspberry Pis)"
+        echo ""
     fi
-    
-    log SUCCESS "Minimum requirements met ($pi_count Raspberry Pis)"
     
     return 0
 }
@@ -418,7 +493,7 @@ classify_devices() {
 
 #
 # save_discovered_devices $output_file
-# 
+# Generate and save discovered_devices.json
 #
 save_discovered_devices() {
     local output_file="$1"
@@ -463,11 +538,24 @@ save_discovered_devices() {
     devices_json+="
   ]"
     
+    # Determine setup mode
+    local setup_mode="cluster"
+    if [[ ${#ACCESSIBLE_DEVICES[@]} -eq 1 ]]; then
+        local self_ip=$(hostname -I | awk '{print $1}')
+        local first_device="${ACCESSIBLE_DEVICES[0]}"
+        local first_ip=$(echo "$first_device" | cut -d: -f1)
+        
+        if [[ "$first_ip" == "$self_ip" ]]; then
+            setup_mode="single-device"
+        fi
+    fi
+    
     # Create complete JSON
     cat > "$output_file" <<EOF
 {
   "discovery_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "network_range": "${NETWORK_RANGE:-unknown}",
+  "setup_mode": "$setup_mode",
   "total_discovered": ${#DISCOVERED_IPS[@]},
   "total_accessible": ${#ACCESSIBLE_DEVICES[@]},
   "devices": $devices_json
@@ -475,6 +563,13 @@ save_discovered_devices() {
 EOF
     
     log SUCCESS "Discovered devices saved to $output_file"
+    
+    # Show mode
+    if [[ "$setup_mode" == "single-device" ]]; then
+        log INFO "Setup mode: SINGLE-DEVICE"
+    else
+        log INFO "Setup mode: CLUSTER (${#ACCESSIBLE_DEVICES[@]} devices)"
+    fi
     
     return 0
 }
@@ -485,7 +580,7 @@ EOF
 
 #
 # interactive_discovery $output_file
-#
+# Interactive wizard for discovery
 #
 interactive_discovery() {
     local output_file="${1:-/opt/aeon/data/discovered_devices.json}"
@@ -526,24 +621,25 @@ interactive_discovery() {
     # Summary
     print_header "Discovery Complete"
     
-    local pi_count=$(cat "$output_file" | jq -r '.devices[] | select(.device_type == "raspberry_pi") | .ip' | wc -l)
-    local llm_count=$(cat "$output_file" | jq -r '.devices[] | select(.device_type == "llm_computer") | .ip' | wc -l)
-    local host_count=$(cat "$output_file" | jq -r '.devices[] | select(.device_type == "host_computer") | .ip' | wc -l)
-    local total_count=$(cat "$output_file" | jq -r '.devices | length')
+    local pi_count=$(jq -r '[.devices[] | select(.device_type == "raspberry_pi")] | length' "$output_file" 2>/dev/null || echo "0")
+    local llm_count=$(jq -r '[.devices[] | select(.device_type == "llm_computer")] | length' "$output_file" 2>/dev/null || echo "0")
+    local host_count=$(jq -r '[.devices[] | select(.device_type == "host_computer")] | length' "$output_file" 2>/dev/null || echo "0")
+    local total_count=$(jq -r '.devices | length' "$output_file" 2>/dev/null || echo "0")
+    local setup_mode=$(jq -r '.setup_mode' "$output_file" 2>/dev/null || echo "unknown")
     
     log SUCCESS "Discovery Summary:"
-    log INFO "  • Total devices found: $total_count"
+    log INFO "  • Total devices: $total_count"
     log INFO "  • Raspberry Pis: $pi_count"
     log INFO "  • LLM Computers: $llm_count"
     log INFO "  • Host Computers: $host_count"
+    log INFO "  • Setup mode: $setup_mode"
     log INFO "  • Results: $output_file"
     echo ""
     
-    if [[ $pi_count -ge 3 ]]; then
-        log SUCCESS "✅ Ready to proceed with cluster setup"
+    if [[ $pi_count -ge 1 ]]; then
+        log SUCCESS "✅ Ready to proceed with setup"
     else
-        log ERROR "❌ Need at least 3 Raspberry Pis (found $pi_count)"
-        return 1
+        log WARN "⚠️  No Raspberry Pis found"
     fi
     
     return 0
@@ -555,7 +651,7 @@ interactive_discovery() {
 
 #
 # automated_discovery $network_range $ssh_user $ssh_password $output_file
-#
+# Non-interactive discovery for automation
 #
 automated_discovery() {
     local network_range="$1"
@@ -588,12 +684,6 @@ export -f classify_devices
 # STANDALONE EXECUTION
 # ============================================================================
 
-#
-# 02-discovery.sh interactive/--interactive $output_file
-# 02-discovery.sh automated/--automated $network_range $ssh_user $ssh_password $output_file
-# 02-discovery.sh
-# standalone execution
-#
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Script is being executed directly
     
