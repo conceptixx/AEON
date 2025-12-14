@@ -53,51 +53,61 @@ source "$LIB_DIR/common.sh" || {
     echo "ERROR: Failed to source common.sh" >&2
     exit 1
 }
+log INFO "$LIB_DIR/common.sh sourced"
 
 source "$LIB_DIR/preflight.sh" || {
     log ERROR "Failed to source preflight.sh"
     exit 1
 }
+log INFO "$LIB_DIR/preflight.sh sourced"
 
 source "$LIB_DIR/discovery.sh" || {
     log ERROR "Failed to source discovery.sh"
     exit 1
 }
+log INFO "$LIB_DIR/discovery.sh sourced"
 
 source "$LIB_DIR/hardware.sh" || {
     log ERROR "Failed to source hardware.sh"
     exit 1
 }
+log INFO "$LIB_DIR/hardware.sh sourced"
 
 source "$LIB_DIR/validation.sh" || {
     log ERROR "Failed to source validation.sh"
     exit 1
 }
+log INFO "$LIB_DIR/validation.sh sourced"
 
 source "$LIB_DIR/parallel.sh" || {
     log ERROR "Failed to source parallel.sh"
     exit 1
 }
+log INFO "$LIB_DIR/parallel.sh sourced"
 
 source "$LIB_DIR/user.sh" || {
     log ERROR "Failed to source user.sh"
     exit 1
 }
+log INFO "$LIB_DIR/user.sh sourced"
 
 source "$LIB_DIR/reboot.sh" || {
     log ERROR "Failed to source reboot.sh"
     exit 1
 }
+log INFO "$LIB_DIR/reboot.sh sourced"
 
 source "$LIB_DIR/swarm.sh" || {
     log ERROR "Failed to source swarm.sh"
     exit 1
 }
+log INFO "$LIB_DIR/swarm.sh sourced"
 
 source "$LIB_DIR/report.sh" || {
     log ERROR "Failed to source report.sh"
     exit 1
 }
+log INFO "$LIB_DIR/report.sh sourced"
 
 # Note: common.sh provides log, print_banner, print_header, colors, utilities
 

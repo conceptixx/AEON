@@ -230,8 +230,8 @@ print_banner() {
 EOF
     
     echo -e "${BOLD}${CYAN}${BOX_TL}$(printf '%*s' 60 '' | tr ' ' "$BOX_H")${BOX_TR}${NC}"
-    echo -e "${BOLD}${CYAN}${BOX_V}  Version: $AEON_VERSION$(printf '%*s' $((60 - 12 - ${#AEON_VERSION})) '')${BOX_V}${NC}"
-    echo -e "${BOLD}${CYAN}${BOX_V}  Installation Directory: $AEON_DIR$(printf '%*s' $((60 - 27 - ${#AEON_DIR})) '')${BOX_V}${NC}"
+    echo -e "${BOLD}${CYAN}${BOX_V} Version: $AEON_VERSION$(printf '%*s' $((60 - 12 - ${#AEON_VERSION})) '')${BOX_V}${NC}"
+    echo -e "${BOLD}${CYAN}${BOX_V} Installation Directory: $AEON_DIR$(printf '%*s' $((60 - 27 - ${#AEON_DIR})) '')${BOX_V}${NC}"
     echo -e "${BOLD}${CYAN}${BOX_BL}$(printf '%*s' 60 '' | tr ' ' "$BOX_H")${BOX_BR}${NC}"
     echo ""
 }
