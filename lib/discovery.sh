@@ -662,7 +662,6 @@ automated_discovery() {
     NETWORK_RANGE="$network_range"
     
     # Run discovery steps
-    print_banner
     discover_network_devices "$network_range" || return 1
     sleep 10
 
