@@ -132,27 +132,27 @@ check_prerequisites() {
     if [[ -d "$INSTALL_DIR" ]]; then
         log WARN "AEON is already installed at $INSTALL_DIR"
         echo ""
-        echo -n "Reinstall? [y/N]: "
         
-        # Read from terminal directly
-        if [[ -t 0 ]]; then
-            # Interactive terminal available
-            read -r response
+        # Check if we can access terminal
+        if [[ -t 1 ]] && [[ -c /dev/tty ]]; then
+            # Interactive mode - read from TTY
+            echo -n "Reinstall? [y/N]: "
+            read -r response < /dev/tty
         else
-            # Non-interactive (piped input) - default to no
+            # Non-interactive - default to no
+            echo "Reinstall? [y/N]: n (non-interactive mode)"
             response="n"
-            echo "n (non-interactive mode)"
         fi
         
         echo ""
         
-        # Convert to lowercase for comparison
-        response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+        # Normalize response
+        response=$(echo "$response" | tr '[:upper:]' '[:lower:]' | xargs)
         
         if [[ "$response" != "y" ]] && [[ "$response" != "yes" ]]; then
             log INFO "Installation cancelled"
             echo ""
-            log INFO "To reinstall, run: sudo rm -rf $INSTALL_DIR && curl ... | sudo bash"
+            log INFO "To force reinstall: sudo rm -rf $INSTALL_DIR && curl ... | sudo bash"
             echo ""
             exit 0
         fi
