@@ -230,10 +230,8 @@ run_preflight_checks() {
 # ============================================================================
 
 get_network_range() {
-    # Auto-detect network range from device IP
     local ip=""
     
-    # Try to get IP
     ip=$(hostname -I 2>/dev/null | awk '{print $1}')
     
     if [[ -z "$ip" ]]; then
@@ -241,20 +239,18 @@ get_network_range() {
     fi
     
     if [[ -z "$ip" ]]; then
-        log ERROR "Could not detect IP address"
+        >&2 log ERROR "Could not detect IP address"  # ← To stderr!
         return 1
     fi
     
-    log DEBUG "Detected IP: $ip"
+    >&2 log DEBUG "Detected IP: $ip"  # ← To stderr!
     
-    # Extract first 3 octets
     local network_prefix=$(echo "$ip" | cut -d. -f1-3)
-    
-    # Build CIDR range
     local network_range="${network_prefix}.0/24"
     
-    log INFO "Auto-detected network range: $network_range"
-    echo "$network_range"
+    >&2 log INFO "Auto-detected network range: $network_range"  # ← To stderr!
+    
+    echo "$network_range"  # ← ONLY this to stdout
     return 0
 }
 
