@@ -1,8 +1,6 @@
-   ![AEON Banner](.github/assets/aeon_banner_v2_2400x600.png)
-   
-   # AEON - Autonomous Evolving Orchestration Network
+   ![AEON Logo](.github/assets/logo/aeon_app_icon_final_v3_1024x1024.png)
 
-![AEON Logo](.github/assets/logo/aeon_app_icon_final_v3_1024x1024.png)
+   # AEON - Autonomous Evolving Orchestration Network
 
 **Transform your Raspberry Pis into a powerful Docker Swarm cluster in minutes!**
 

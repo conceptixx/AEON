@@ -1,3 +1,5 @@
+![AEON Banner](.github/assets/aeon_banner_v2_2400x600.png)
+
 # discovery.sh - AEON Network Discovery Module
 
 ## 📋 Overview
