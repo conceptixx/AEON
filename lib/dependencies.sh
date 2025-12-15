@@ -177,6 +177,7 @@ load_module_with_dependencies() {
     
     # Skip if already loaded
     if is_module_loaded "$module_name"; then
+        echo "load_module_with_dependencies($module_name) - loaded"
         return 0
     fi
     

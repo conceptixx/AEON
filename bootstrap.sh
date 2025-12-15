@@ -286,14 +286,14 @@ perform_installation() {
 #
 show_next_steps() {
     log INFO "Starting AEON installation..."
-    local seconds=30
-    local i
-    for ((i=seconds; i>0; i--)); do
-        printf "\rPress any key to continue (auto in %2ds)\033[K" "$i"
-        if read -r -n 1 -s -t 1; then
-            break
-        fi
-    done
+#    local seconds=30
+#    local i
+#    for ((i=seconds; i>0; i--)); do
+#        printf "\rPress any key to continue (auto in %2ds)\033[K" "$i"
+#        if read -r -n 1 -s -t 1; then
+#            break
+#        fi
+#    done
     # Auto-launch aeon-go.sh
     cd "$INSTALL_DIR"
     exec bash aeon_go.sh
