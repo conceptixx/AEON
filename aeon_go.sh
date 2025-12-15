@@ -28,8 +28,8 @@ set -euo pipefail
 # ============================================================================
 
 # Prevent double-loading
-[[ -n "${AEON_AEON_GO_LOADED:-}" ]] && return 0
-readonly AEON_AEON_GO_LOADED=1
+#[[ -n "${AEON_AEON_GO_LOADED:-}" ]] && return 0
+#readonly AEON_AEON_GO_LOADED=1
 
 # Load dependencies
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
