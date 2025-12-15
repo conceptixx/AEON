@@ -81,16 +81,6 @@ NC='\033[0m'
 # Displays the AEON ASCII art logo and bootstrap title
 #
 print_banner() {
-    if command -v tput &>/dev/null; then
-        TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
-    else
-        # Fallback to stty if tput not available
-        local size=$(stty size 2>/dev/null || echo "24 80")
-        TERM_WIDTH=$(echo "$size" | awk '{print $2}')
-    fi
-    
-    # Minimum terminal size
-    [[ $TERM_WIDTH -lt 80 ]] && TERM_WIDTH=80
     clear
     local logo_lines=(
         "   █████╗  ███████╗  ██████╗  ███╗   ██╗ "
@@ -105,7 +95,7 @@ print_banner() {
     
     for line in "${logo_lines[@]}"; do
         local text_length=${#line}
-        local padding=$(( (TERM_WIDTH - text_length) / 2 ))
+        local padding=$(( (80 - text_length) / 2 ))
         printf "%${padding}s%s\n" "" "$text"
     done
     
