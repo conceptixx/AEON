@@ -636,8 +636,6 @@ trap 'handle_error $LINENO' ERR
 # Main orchestration - calls all phases in order
 #
 main() {
-    # initialize aeon setup
-    aeon_init
     # Initialize progress bar
     init_progress
     
