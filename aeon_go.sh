@@ -34,7 +34,7 @@ readonly AEON_AEON_GO_LOADED=1
 # Load dependencies
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
-    source "$SCRIPT_DIR/dependencies.sh" || source "/opt/aeon/lib/dependencies.sh" || {
+   source "/opt/aeon/lib/dependencies.sh" || {
         echo "ERROR: Cannot find dependencies.sh" >&2
         exit 1
     }
