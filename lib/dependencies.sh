@@ -167,7 +167,7 @@ load_single_module() {
         fi
         return 1
     fi
-    echo "$module_name"
+    echo "load $module_name"
     # Source the module
     source "$module_path" || {
         if is_module_loaded "common.sh"; then
