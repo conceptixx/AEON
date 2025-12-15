@@ -173,6 +173,7 @@ load_single_module() {
 #
 load_module_with_dependencies() {
     local module_name="$1"
+    echo "load_module_with_dependencies($module_name)"
     
     # Skip if already loaded
     if is_module_loaded "$module_name"; then
