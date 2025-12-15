@@ -53,15 +53,6 @@ SWARM_OVERLAY_SUBNET="10.0.1.0/24"
 SWARM_VERIFY_RETRIES=3
 SWARM_VERIFY_DELAY=10
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-NC='\033[0m'
-
 # Global variables (set during execution)
 FIRST_MANAGER=""
 OTHER_MANAGERS=()
@@ -70,45 +61,7 @@ WORKERS=()
 MANAGER_TOKEN=""
 WORKER_TOKEN=""
 
-# ============================================================================
-# LOGGING
-# ============================================================================
-
-log() {
-    local level="$1"
-    shift
-    local message="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
-    # Log to file if available
-    if [[ -n "${AEON_LOG_DIR:-}" ]] && [[ -d "${AEON_LOG_DIR}" ]]; then
-        echo "[$timestamp] [$level] $message" >> "${AEON_LOG_DIR}/swarm.log"
-    fi
-    
-    case "$level" in
-        ERROR)
-            echo -e "${RED}❌ $message${NC}" >&2
-            ;;
-        WARN)
-            echo -e "${YELLOW}⚠️  $message${NC}"
-            ;;
-        INFO)
-            echo -e "${CYAN}ℹ️  $message${NC}"
-            ;;
-        SUCCESS)
-            echo -e "${GREEN}✅ $message${NC}"
-            ;;
-        STEP)
-            echo -e "${BOLD}${BLUE}▶ $message${NC}"
-            ;;
-    esac
-}
-
 print_header() {
-    echo ""
-    echo -e "${BOLD}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD}  $1${NC}"
-    echo -e "${BOLD}═══════════════════════════════════════════════════════════${NC}"
     echo ""
 }
 

@@ -48,7 +48,7 @@ load_dependencies "user.sh"
 AEON_USER="aeon"
 AEON_GROUP="aeon"
 AEON_HOME="/home/aeon"
-AEON_DIR="/opt/aeon"
+# AEON_DIR="/opt/aeon"
 AEON_ENV_FILE="$AEON_DIR/.aeon.env"
 SUDOERS_FILE="/etc/sudoers.d/aeon"
 

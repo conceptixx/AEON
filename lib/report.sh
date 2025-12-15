@@ -47,26 +47,6 @@ load_dependencies "report.sh"
 REPORT_DIR="/opt/aeon/reports"
 REPORT_TIMESTAMP=$(date '+%Y%m%d-%H%M%S')
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-# Box drawing characters
-BOX_TL="┌"
-BOX_TR="┐"
-BOX_BL="└"
-BOX_BR="┘"
-BOX_H="─"
-BOX_V="│"
-BOX_VR="├"
-BOX_VL="┤"
-
 # ============================================================================
 # DATA COLLECTION
 # ============================================================================
