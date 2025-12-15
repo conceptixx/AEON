@@ -44,7 +44,7 @@ load_dependencies "report.sh"
 # CONFIGURATION
 # ============================================================================
 
-REPORT_DIR="/opt/aeon/reports"
+# REPORT_DIR="/opt/aeon/reports"
 REPORT_TIMESTAMP=$(date '+%Y%m%d-%H%M%S')
 
 # ============================================================================
