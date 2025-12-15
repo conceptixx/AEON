@@ -218,7 +218,7 @@ load_dependencies() {
         echo "FATAL: Failed to load dependencies for $requesting_module" >&2
         exit 1
     }
-    
+    echo "$1"
     return 0
 }
 
