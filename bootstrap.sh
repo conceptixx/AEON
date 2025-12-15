@@ -96,7 +96,7 @@ print_banner() {
     for line in "${logo_lines[@]}"; do
         local text_length=${#line}
         local padding=$(( (80 - text_length) / 2 ))
-        printf "%${padding}s%s\n" "" "$text"
+        printf "%${padding}s%s\n" "" "$line"
     done
     
     echo ""
