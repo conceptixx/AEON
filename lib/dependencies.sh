@@ -186,10 +186,10 @@ load_module_with_dependencies() {
     # Load dependencies first (in order)
     if [[ -n "$deps" ]]; then
         for dep in $deps; do
+            echo "load_module_with_dependencies($module_name) -> $deps"
             load_module_with_dependencies "$dep" || return 1
         done
     fi
-    echo "load_module_with_dependencies($module_name)"
     
     # Load the module itself
     load_single_module "$module_name" || return 1
@@ -212,17 +212,15 @@ load_dependencies() {
     if [[ -z "${MODULE_DEPENDENCIES[$requesting_module]+isset}" ]]; then
         echo "WARNING: Module '$requesting_module' not registered in dependency manifest" >&2
         echo "         Add it to MODULE_DEPENDENCIES in dependencies.sh" >&2
-        echo "         Add it to MODULE_DEPENDENCIES in dependencies.sh"
         # Continue anyway, will try to load with no deps
     fi
     
     # Load all dependencies
     load_module_with_dependencies "$requesting_module" || {
         echo "FATAL: Failed to load dependencies for $requesting_module" >&2
-        echo "FATAL: Failed to load dependencies for $requesting_module"
         exit 1
     }
-    echo "load_dependencies($requesting_module)"
+
     return 0
 }
 
