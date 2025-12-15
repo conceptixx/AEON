@@ -128,10 +128,10 @@ find_module() {
     local module_name="$1"
     
     # Try relative to current script directory
-#    if [[ -f "$SCRIPT_DIR/$module_name" ]]; then
-#        echo "$SCRIPT_DIR/$module_name"
-#        return 0
-#    fi
+    if [[ -f "$SCRIPT_DIR/$module_name" ]]; then
+        echo "$SCRIPT_DIR/$module_name"
+        return 0
+    fi
     
     # Try in LIB_DIR
     if [[ -f "$LIB_DIR/$module_name" ]]; then
