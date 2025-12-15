@@ -117,9 +117,7 @@ is_module_loaded() {
     local module_name="$1"
     local guard_name=$(get_load_guard_name "$module_name")
     
-    [[ "${MODULE_LOADED[$module_name]-}" == "$guard_name" ]]
-
-#    [[ -n "${!guard_name:-}" ]]
+    [[ -n "${!guard_name:-}" ]]
 }
 
 #
