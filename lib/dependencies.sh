@@ -191,7 +191,7 @@ load_module_with_dependencies() {
     
     # Load the module itself
     load_single_module "$module_name" || return 1
-    
+    echo "load_module_with_dependencies($module_name)"
     return 0
 }
 
@@ -218,7 +218,7 @@ load_dependencies() {
         echo "FATAL: Failed to load dependencies for $requesting_module" >&2
         exit 1
     }
-    echo "$1"
+    echo "load_dependencies($requesting_module)"
     return 0
 }
 
