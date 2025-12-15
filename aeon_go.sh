@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ################################################################################
 # AEON Main Orchestrator
 # File: aeon-go.sh
@@ -24,9 +24,28 @@
 set -euo pipefail
 
 # ============================================================================
-# CONFIGURATION
+# DEPENDENCIES
 # ============================================================================
 
+# Prevent double-loading
+[[ -n "${AEON_AEON_GO_LOADED:-}" ]] && return 0
+readonly AEON_AEON_GO_LOADED=1
+
+# Load dependencies
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
+    source "$SCRIPT_DIR/dependencies.sh" || source "/opt/aeon/lib/dependencies.sh" || {
+        echo "ERROR: Cannot find dependencies.sh" >&2
+        exit 1
+    }
+fi
+
+# load dependecies -if available
+load_dependencies "aeon_go.sh"
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
 AEON_VERSION="0.1.0"
 AEON_DIR="/opt/aeon"
 DATA_DIR="$AEON_DIR/data"
@@ -34,82 +53,15 @@ LOG_DIR="$AEON_DIR/logs"
 SECRETS_DIR="$AEON_DIR/secrets"
 REPORT_DIR="$AEON_DIR/reports"
 
-# Note: REQUIRED_TOOLS is now defined in preflight.sh
-# No need to define here - preflight.sh will handle it
-
 # Default network range
 DEFAULT_NETWORK_RANGE="192.168.1.0/24"
 
 # ============================================================================
 # MODULE LOADING
 # ============================================================================
-
 # Set library directory
 LIB_DIR="$AEON_DIR/lib"
 REMOTE_DIR="$AEON_DIR/remote"
-
-# Source all required modules IN ORDER
-source "$LIB_DIR/common.sh" || {
-    echo "ERROR: Failed to source common.sh" >&2
-    exit 1
-}
-log INFO "$LIB_DIR/common.sh sourced"
-
-source "$LIB_DIR/preflight.sh" || {
-    log ERROR "Failed to source preflight.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/preflight.sh sourced"
-
-source "$LIB_DIR/discovery.sh" || {
-    log ERROR "Failed to source discovery.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/discovery.sh sourced"
-
-source "$LIB_DIR/hardware.sh" || {
-    log ERROR "Failed to source hardware.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/hardware.sh sourced"
-
-source "$LIB_DIR/validation.sh" || {
-    log ERROR "Failed to source validation.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/validation.sh sourced"
-
-source "$LIB_DIR/parallel.sh" || {
-    log ERROR "Failed to source parallel.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/parallel.sh sourced"
-
-source "$LIB_DIR/user.sh" || {
-    log ERROR "Failed to source user.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/user.sh sourced"
-
-source "$LIB_DIR/reboot.sh" || {
-    log ERROR "Failed to source reboot.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/reboot.sh sourced"
-
-source "$LIB_DIR/swarm.sh" || {
-    log ERROR "Failed to source swarm.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/swarm.sh sourced"
-
-source "$LIB_DIR/report.sh" || {
-    log ERROR "Failed to source report.sh"
-    exit 1
-}
-log INFO "$LIB_DIR/report.sh sourced"
-
-# Note: common.sh provides log, print_banner, print_header, colors, utilities
 
 # ============================================================================
 # PHASE 1: PRE-FLIGHT CHECKS
@@ -684,55 +636,25 @@ trap 'handle_error $LINENO' ERR
 # Main orchestration - calls all phases in order
 #
 main() {
-    local start_time=$(date +%s)
+    # initialize aeon setup
+    aeon_init
+    # Initialize progress bar
+    init_progress
     
-    print_banner    
+    # Run phases
+    local start_time=$(date +%s)
     run_preflight_checks || exit 1
-    sleep 10
-
-    print_banner    
     run_discovery_phase || exit 1
-    sleep 10
-
-    print_banner    
     run_hardware_detection || exit 1
-    sleep 10
-
-    print_banner    
     run_validation || exit 1
-    sleep 10
-
-    print_banner    
     run_role_assignment || exit 1
-    sleep 10
-
-    print_banner    
     run_installation || exit 1
-    sleep 10
-
-    print_banner    
     run_user_setup || exit 1
-    sleep 10
-
-    print_banner    
     run_reboot_phase || true
-    sleep 10
-
-    print_banner    
     run_swarm_setup || exit 1
-    sleep 10
-
-    print_banner    
     run_report_generation || true
-    sleep 10
-
-    print_banner    
     show_security_warning || true
-    sleep 10
-
-    print_banner    
     print_completion
-    sleep 10
   
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))

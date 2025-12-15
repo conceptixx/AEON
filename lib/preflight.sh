@@ -19,18 +19,30 @@
 #
 # Dependencies:
 #   - lib/common.sh
+#   - lib/progress.sh
 ################################################################################
 
-# Source dependencies
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh" || {
-    echo "ERROR: Failed to source common.sh" >&2
-    exit 1
-}
+set -euo pipefail
 
-# Prevent double-sourcing
+# ============================================================================
+# DEPENDENCIES
+# ============================================================================
+
+# Prevent double-loading
 [[ -n "${AEON_PREFLIGHT_LOADED:-}" ]] && return 0
 readonly AEON_PREFLIGHT_LOADED=1
+
+# Load dependencies
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
+    source "$SCRIPT_DIR/dependencies.sh" || source "/opt/aeon/lib/dependencies.sh" || {
+        echo "ERROR: Cannot find dependencies.sh" >&2
+        exit 1
+    }
+fi
+
+# load dependecies -if available
+load_dependencies "preflight.sh"
 
 # ============================================================================
 # CONFIGURATION
@@ -48,13 +60,13 @@ readonly REQUIRED_TOOLS=(
     "git"
     "sshpass"
     "python3"
+    "nmap"
+    "bc"
+    "docker"
 )
 
 # Optional tools (warn if missing, but don't fail)
 readonly OPTIONAL_TOOLS=(
-    "nmap"
-    "bc"
-    "docker"
 )
 
 # ============================================================================
@@ -74,18 +86,25 @@ check_root() {
     # Example:
     #   check_root || exit 1
     
-    log STEP "Checking root privileges..."
+    log_to_file "Checking root privileges..."
     
     if ! is_root; then
-        log ERROR "This script must be run as root"
+        log_to_file "ERROR: This script must be run as root"
+        
+        # Show error on screen
+        tput cup $((TERM_HEIGHT - 5)) 0 2>/dev/null || true
+        echo ""
+        echo -e "${RED}ERROR: This script must be run as root${NC}"
         echo ""
         echo -e "${YELLOW}Please run with sudo:${NC}"
         echo -e "  ${CYAN}sudo bash $0${NC}"
         echo ""
+        
+        complete_phase "failed" "Not running as root"
         exit 1
     fi
     
-    log SUCCESS "Running as root"
+    log_to_file "✓ Running as root"
     return 0
 }
 
@@ -103,17 +122,17 @@ check_bash_version() {
     #   0 if version >= 4.0
     #   1 if version < 4.0
     
-    log STEP "Checking bash version..."
+    log_to_file "Checking bash version..."
     
     local major_version="${BASH_VERSINFO[0]}"
     
     if [[ $major_version -lt $REQUIRED_BASH_VERSION ]]; then
-        log ERROR "Bash version $REQUIRED_BASH_VERSION or higher required"
-        log ERROR "Current version: $BASH_VERSION"
+        log_to_file "ERROR: Bash version $REQUIRED_BASH_VERSION or higher required"
+        log_to_file "Current version: $BASH_VERSION"
         return 1
     fi
     
-    log SUCCESS "Bash version: $BASH_VERSION"
+    log_to_file "✓ Bash version: $BASH_VERSION"
     return 0
 }
 
@@ -134,7 +153,7 @@ check_internet() {
     # Example:
     #   check_internet || exit 1
     
-    log STEP "Checking internet connectivity..."
+    log_to_file "Checking internet connectivity..."
     
     # Try multiple DNS servers
     local dns_servers=(
@@ -145,18 +164,13 @@ check_internet() {
     
     for dns in "${dns_servers[@]}"; do
         if ping -c 1 -W 3 "$dns" &>/dev/null; then
-            log SUCCESS "Internet connection available"
+            log_to_file "✓ Internet connection available (tested: $dns)"
             return 0
         fi
     done
     
-    log ERROR "No internet connection detected"
-    log INFO "Internet is required for:"
-    log INFO "  • Package installation"
-    log INFO "  • Docker installation"
-    log INFO "  • Repository downloads"
-    echo ""
-    log INFO "Please check your network connection and try again"
+    log_to_file "ERROR: No internet connection detected"
+    log_to_file "Internet is required for package installation, Docker, and repository downloads"
     
     return 1
 }
@@ -171,14 +185,13 @@ check_dns_resolution() {
     #   0 if DNS works
     #   1 if DNS fails
     
-    log STEP "Checking DNS resolution..."
+    log_to_file "Checking DNS resolution..."
     
     if host github.com &>/dev/null || nslookup github.com &>/dev/null; then
-        log SUCCESS "DNS resolution working"
+        log_to_file "✓ DNS resolution working"
         return 0
     else
-        log WARN "DNS resolution may be impaired"
-        log INFO "This may cause issues downloading packages"
+        log_to_file "⚠ DNS resolution may be impaired"
         return 1
     fi
 }
@@ -200,7 +213,7 @@ check_disk_space() {
     # Example:
     #   check_disk_space || exit 1
     
-    log STEP "Checking disk space..."
+    log_to_file "Checking disk space..."
     
     # Get available space in KB
     local available_kb=$(df / | tail -1 | awk '{print $4}')
@@ -208,17 +221,13 @@ check_disk_space() {
     local required_kb=$((MIN_DISK_SPACE_GB * 1024 * 1024))
     
     if [[ $available_kb -lt $required_kb ]]; then
-        log ERROR "Insufficient disk space"
-        log ERROR "  Available: ${available_gb}GB"
-        log ERROR "  Required: ${MIN_DISK_SPACE_GB}GB"
-        echo ""
-        log INFO "Please free up disk space and try again"
-        log INFO "You can check disk usage with: df -h /"
-        
+        log_to_file "ERROR: Insufficient disk space"
+        log_to_file "  Available: ${available_gb}GB"
+        log_to_file "  Required: ${MIN_DISK_SPACE_GB}GB"
         return 1
     fi
     
-    log SUCCESS "Sufficient disk space: ${available_gb}GB available"
+    log_to_file "✓ Sufficient disk space: ${available_gb}GB available"
     return 0
 }
 
@@ -232,17 +241,16 @@ check_disk_write() {
     #   0 if writable
     #   1 if not writable
     
-    log STEP "Checking write permissions..."
+    log_to_file "Checking write permissions..."
     
     local test_dir="${AEON_DIR}/test_$$"
     
     if mkdir -p "$test_dir" 2>/dev/null; then
         rmdir "$test_dir" 2>/dev/null
-        log SUCCESS "Write permissions verified"
+        log_to_file "✓ Write permissions verified"
         return 0
     else
-        log ERROR "Cannot write to $AEON_DIR"
-        log INFO "Please check directory permissions"
+        log_to_file "ERROR: Cannot write to $AEON_DIR"
         return 1
     fi
 }
@@ -291,7 +299,7 @@ get_package_manager() {
 }
 
 install_tool() {
-    # Install a single tool using available package manager
+    # Install a single tool using available package manager (SILENT)
     #
     # Arguments:
     #   $1 - Tool name
@@ -304,42 +312,42 @@ install_tool() {
     local pkg_mgr=$(get_package_manager)
     
     if [[ -z "$pkg_mgr" ]]; then
-        log ERROR "No supported package manager found"
+        log_to_file "ERROR: No supported package manager found"
         return 1
     fi
     
-    log INFO "Installing $tool..."
+    log_to_file "Installing $tool..."
     
     case "$pkg_mgr" in
         apt-get)
-            apt-get update -qq 2>/dev/null || true
-            apt-get install -y -qq "$tool" 2>/dev/null
+            apt-get update -qq &>/dev/null || true
+            apt-get install -y -qq "$tool" &>/dev/null
             ;;
         yum)
-            yum install -y -q "$tool" 2>/dev/null
+            yum install -y -q "$tool" &>/dev/null
             ;;
         dnf)
-            dnf install -y -q "$tool" 2>/dev/null
+            dnf install -y -q "$tool" &>/dev/null
             ;;
         brew)
-            brew install "$tool" 2>/dev/null
+            brew install "$tool" &>/dev/null
             ;;
         pacman)
-            pacman -S --noconfirm "$tool" 2>/dev/null
+            pacman -S --noconfirm "$tool" &>/dev/null
             ;;
     esac
     
     if check_tool "$tool"; then
-        log SUCCESS "$tool installed successfully"
+        log_to_file "✓ $tool installed successfully"
         return 0
     else
-        log ERROR "Failed to install $tool"
+        log_to_file "ERROR: Failed to install $tool"
         return 1
     fi
 }
 
 check_required_tools() {
-    # Check and install all required tools
+    # Check and install all required tools (SILENT)
     #
     # Arguments:
     #   None
@@ -351,7 +359,7 @@ check_required_tools() {
     # Example:
     #   check_required_tools || exit 1
     
-    log STEP "Checking required tools..."
+    log_to_file "Checking required tools..."
     
     local missing_tools=()
     local failed_tools=()
@@ -365,14 +373,13 @@ check_required_tools() {
     
     # If all tools present, we're done
     if [[ ${#missing_tools[@]} -eq 0 ]]; then
-        log SUCCESS "All required tools available"
+        log_to_file "✓ All required tools available"
         return 0
     fi
     
     # Install missing tools
-    log WARN "Missing tools: ${missing_tools[*]}"
-    log INFO "Installing missing tools..."
-    echo ""
+    log_to_file "Missing tools: ${missing_tools[*]}"
+    log_to_file "Installing missing tools..."
     
     for tool in "${missing_tools[@]}"; do
         if ! install_tool "$tool"; then
@@ -382,17 +389,12 @@ check_required_tools() {
     
     # Check if any installations failed
     if [[ ${#failed_tools[@]} -gt 0 ]]; then
-        log ERROR "Failed to install: ${failed_tools[*]}"
-        echo ""
-        log INFO "Please install these tools manually:"
-        for tool in "${failed_tools[@]}"; do
-            log INFO "  • $tool"
-        done
+        log_to_file "ERROR: Failed to install: ${failed_tools[*]}"
+        log_to_file "Please install these tools manually"
         return 1
     fi
     
-    echo ""
-    log SUCCESS "All required tools installed"
+    log_to_file "✓ All required tools installed"
     return 0
 }
 
@@ -405,7 +407,7 @@ check_optional_tools() {
     # Returns:
     #   Always 0
     
-    log STEP "Checking optional tools..."
+    log_to_file "Checking optional tools..."
     
     local missing_optional=()
     
@@ -416,10 +418,10 @@ check_optional_tools() {
     done
     
     if [[ ${#missing_optional[@]} -gt 0 ]]; then
-        log WARN "Optional tools not available: ${missing_optional[*]}"
-        log INFO "These are not required but recommended"
+        log_to_file "⚠ Optional tools not available: ${missing_optional[*]}"
+        log_to_file "These are not required but recommended"
     else
-        log SUCCESS "All optional tools available"
+        log_to_file "✓ All optional tools available"
     fi
     
     return 0
@@ -442,7 +444,7 @@ create_directories() {
     # Example:
     #   create_directories || exit 1
     
-    log STEP "Creating AEON directory structure..."
+    log_to_file "Creating AEON directory structure..."
     
     local directories=(
         "$AEON_DIR"
@@ -466,8 +468,10 @@ create_directories() {
         fi
         
         if ! ensure_directory "$dir" "$perms"; then
-            log ERROR "Failed to create: $dir"
+            log_to_file "ERROR: Failed to create: $dir"
             failed=1
+        else
+            log_to_file "✓ Created: $dir"
         fi
     done
     
@@ -475,7 +479,7 @@ create_directories() {
         return 1
     fi
     
-    log SUCCESS "Directory structure created"
+    log_to_file "✓ Directory structure created"
     return 0
 }
 
@@ -489,7 +493,7 @@ verify_directories() {
     #   0 if all verified
     #   1 if any issues
     
-    log STEP "Verifying directory structure..."
+    log_to_file "Verifying directory structure..."
     
     local directories=(
         "$AEON_DIR"
@@ -504,17 +508,17 @@ verify_directories() {
     
     for dir in "${directories[@]}"; do
         if [[ ! -d "$dir" ]]; then
-            log ERROR "Directory missing: $dir"
+            log_to_file "ERROR: Directory missing: $dir"
             return 1
         fi
         
         if [[ ! -w "$dir" ]]; then
-            log ERROR "Directory not writable: $dir"
+            log_to_file "ERROR: Directory not writable: $dir"
             return 1
         fi
     done
     
-    log SUCCESS "All directories verified"
+    log_to_file "✓ All directories verified"
     return 0
 }
 
@@ -532,7 +536,7 @@ check_os_compatibility() {
     #   0 if supported
     #   1 if not supported (with warning)
     
-    log STEP "Checking OS compatibility..."
+    log_to_file "Checking OS compatibility..."
     
     local os_type=$(uname -s)
     local os_release=""
@@ -541,23 +545,22 @@ check_os_compatibility() {
         Linux)
             if [[ -f /etc/os-release ]]; then
                 os_release=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d'"' -f2)
-                log SUCCESS "Detected: $os_release"
+                log_to_file "✓ Detected: $os_release"
                 return 0
             else
-                log WARN "Unknown Linux distribution"
+                log_to_file "⚠ Unknown Linux distribution"
                 return 0  # Continue anyway
             fi
             ;;
         Darwin)
             os_release=$(sw_vers -productVersion 2>/dev/null || echo "Unknown")
-            log SUCCESS "Detected: macOS $os_release"
-            log WARN "macOS support is experimental"
+            log_to_file "✓ Detected: macOS $os_release"
+            log_to_file "⚠ macOS support is experimental"
             return 0
             ;;
         *)
-            log WARN "Unsupported OS: $os_type"
-            log INFO "AEON is designed for Linux"
-            log INFO "Continuing anyway, but issues may occur"
+            log_to_file "⚠ Unsupported OS: $os_type"
+            log_to_file "AEON is designed for Linux, continuing anyway"
             return 0  # Continue anyway
             ;;
     esac
@@ -572,7 +575,7 @@ check_system_resources() {
     # Returns:
     #   0 always (informational only)
     
-    log STEP "Checking system resources..."
+    log_to_file "Checking system resources..."
     
     # Get CPU cores
     local cpu_cores=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "unknown")
@@ -584,9 +587,7 @@ check_system_resources() {
         ram_gb=$((ram_kb / 1024 / 1024))
     fi
     
-    log INFO "System resources:"
-    log INFO "  • CPU cores: $cpu_cores"
-    log INFO "  • RAM: ${ram_gb}GB"
+    log_to_file "System resources: CPU cores: $cpu_cores, RAM: ${ram_gb}GB"
     
     return 0
 }
@@ -596,39 +597,113 @@ check_system_resources() {
 # ============================================================================
 
 run_preflight_checks() {
-    # Main function - run all pre-flight checks in order
+    # Main preflight check orchestration with progress tracking
     #
     # Arguments:
     #   None
     #
     # Returns:
     #   0 if all checks pass
-    #   Exits with 1 if any critical check fails
-    #
-    # Example:
-    #   run_preflight_checks || exit 1
+    #   1 if any critical check fails
     
-    print_header "Pre-flight Checks"
+    start_phase 1
     
-    # Critical checks (exit on failure)
-    check_root || exit 1
-    check_bash_version || exit 1
-    check_internet || exit 1
-    check_disk_space || exit 1
-    check_disk_write || exit 1
-    check_required_tools || exit 1
-    create_directories || exit 1
-    verify_directories || exit 1
+    local has_warnings=false
     
-    # Informational checks (continue on failure)
-    check_dns_resolution || true
-    check_optional_tools || true
-    check_os_compatibility || true
-    check_system_resources || true
+    # All output goes to log file
+    {
+        log_to_file "═══════════════════════════════════════════════════════════"
+        log_to_file "Starting Pre-flight Checks"
+        log_to_file "═══════════════════════════════════════════════════════════"
+        
+        # Critical checks (0-10%)
+        log_to_file ""
+        log_to_file "--- Critical Checks ---"
+        if ! check_root; then
+            complete_phase "failed" "Root check failed"
+            return 1
+        fi
+        update_phase_progress 10
+        
+        # Bash version (10-15%)
+        if ! check_bash_version; then
+            complete_phase "failed" "Bash version too old"
+            return 1
+        fi
+        update_phase_progress 15
+        
+        # Internet connectivity (15-30%)
+        if ! check_internet; then
+            complete_phase "failed" "No internet connection"
+            return 1
+        fi
+        update_phase_progress 30
+        
+        # Disk space (30-40%)
+        if ! check_disk_space; then
+            complete_phase "failed" "Insufficient disk space"
+            return 1
+        fi
+        update_phase_progress 40
+        
+        # Write permissions (40-45%)
+        if ! check_disk_write; then
+            complete_phase "failed" "No write permissions"
+            return 1
+        fi
+        update_phase_progress 45
+        
+        # Required tools (45-70%)
+        if ! check_required_tools; then
+            complete_phase "failed" "Missing required tools"
+            return 1
+        fi
+        update_phase_progress 70
+        
+        # Directory creation (70-85%)
+        if ! create_directories; then
+            complete_phase "failed" "Directory creation failed"
+            return 1
+        fi
+        update_phase_progress 85
+        
+        # Directory verification (85-90%)
+        if ! verify_directories; then
+            complete_phase "failed" "Directory verification failed"
+            return 1
+        fi
+        update_phase_progress 90
+        
+        # Informational checks (90-100%)
+        log_to_file ""
+        log_to_file "--- Informational Checks ---"
+        
+        if ! check_dns_resolution; then
+            has_warnings=true
+        fi
+        update_phase_progress 93
+        
+        check_optional_tools || true
+        update_phase_progress 96
+        
+        check_os_compatibility || true
+        update_phase_progress 98
+        
+        check_system_resources || true
+        update_phase_progress 100
+        
+        log_to_file ""
+        log_to_file "═══════════════════════════════════════════════════════════"
+        log_to_file "Pre-flight Checks Complete"
+        log_to_file "═══════════════════════════════════════════════════════════"
+        
+    } 2>&1  # Redirect all output to log
     
-    echo ""
-    log SUCCESS "All pre-flight checks passed"
-    echo ""
+    if [[ "$has_warnings" == true ]]; then
+        complete_phase "completed_warnings" "See log for details"
+    else
+        complete_phase "completed"
+    fi
     
     return 0
 }

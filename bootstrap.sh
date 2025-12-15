@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ################################################################################
 # AEON Bootstrap Installer
 # File: bootstrap.sh
@@ -8,7 +8,6 @@
 # ============================================================================
 # SELF-EXTRACTION FOR PIPED EXECUTION
 # ============================================================================
-
 if [[ "${AEON_BOOTSTRAP_REEXEC:-}" != "true" ]]; then
     if [[ ! -t 0 ]]; then
         TEMP_SCRIPT="/tmp/aeon-bootstrap-$$.sh"
@@ -26,11 +25,16 @@ if [[ "${AEON_BOOTSTRAP_REEXEC:-}" != "true" ]]; then
     fi
 fi
 
-# Cleanup temp file on exit (if re-executed)
+# ============================================================================
+# SELF-CLEANUP AFTER PIPED EXECUTION
+# ============================================================================
 if [[ "${AEON_BOOTSTRAP_REEXEC:-}" == "true" ]]; then
     trap 'rm -f "/tmp/aeon-bootstrap-$$.sh"' EXIT
 fi
 
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 set -euo pipefail
 
 # Configuration
@@ -39,7 +43,9 @@ AEON_RAW="https://raw.githubusercontent.com/conceptixx/AEON/main"
 INSTALL_DIR="/opt/aeon"
 
 LIB_MODULES=(
+    "dependecies.sh"
     "common.sh"
+    "progress.sh"
     "preflight.sh"
     "discovery.sh"
     "hardware.sh"
@@ -76,18 +82,24 @@ NC='\033[0m'
 #
 print_banner() {
     clear
-    cat << 'EOF'
-
-     █████╗ ███████╗ ██████╗ ███╗   ██╗
-    ██╔══██╗██╔════╝██╔═══██╗████╗  ██║
-    ███████║█████╗  ██║   ██║██╔██╗ ██║
-    ██╔══██║██╔══╝  ██║   ██║██║╚██╗██║
-    ██║  ██║███████╗╚██████╔╝██║ ╚████║
-    ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝
-
-    Bootstrap Installer
+    local logo_lines=(
+        "   █████╗  ███████╗  ██████╗  ███╗   ██╗ "
+        "  ██╔══██╗ ██╔════╝ ██╔═══██╗ ████╗  ██║ "
+        "  ███████║ █████╗   ██║   ██║ ██╔██╗ ██║ "
+        "  ██╔══██║ ██╔══╝   ██║   ██║ ██║╚██╗██║ "
+        "  ██║  ██║ ███████╗ ╚██████╔╝ ██║ ╚████║ "
+        "  ╚═╝  ╚═╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═══╝ "
+        ""
+        "Autonomous Evolving Orchestration Network"
+    )
     
-EOF
+    for line in "${logo_lines[@]}"; do
+        local text_length=${#line}
+        local padding=$(( (TERM_WIDTH - text_length) / 2 ))
+        printf "%${padding}s%s\n" "" "$text"
+    done
+    
+    echo ""
 }
 
 #
@@ -127,15 +139,16 @@ log() {
 # Verifies the script is running with root privileges
 #
 check_root() {
+    log STEP "Checking sudo ..."
     if [[ $EUID -ne 0 ]]; then
         log ERROR "This script must be run as root"
-        echo ""
-        echo -e "${YELLOW}Please run:${NC}"
-        echo -e "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash${NC}"
-        echo ""
+        log INFO ""
+        log INFO "Please run:"
+        log INFO "  curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash"
+        log INFO ""
         exit 1
     fi
-    log SUCCESS "check_root"
+    log SUCCESS "Check for root user successful"
 }
 
 #
@@ -143,34 +156,34 @@ check_root() {
 # Checks if AEON is already installed and handles reinstallation
 #
 check_prerequisites() {
-    log STEP "Checking prerequisites..."
+    log STEP "Checking prerequisites ..."
     
     # Check if already installed
     if [[ -d "$INSTALL_DIR" ]]; then
         log WARN "AEON is already installed at $INSTALL_DIR"
-        echo ""
+        log INFO ""
         
         # Check if we can access terminal
         if [[ -t 1 ]] && [[ -c /dev/tty ]]; then
             # Interactive mode - read from TTY
-            echo -n "Reinstall? [y/N]: "
+            log INFO "Reinstall? [y/N]: "
             read -r response < /dev/tty
         else
             # Non-interactive - default to no
-            echo "Reinstall? [y/N]: n (non-interactive mode)"
+            log INFO "Reinstall? [y/N]: n (non-interactive mode)"
             response="n"
         fi
         
-        echo ""
+        log INFO ""
         
         # Normalize response
         response=$(echo "$response" | tr '[:upper:]' '[:lower:]' | xargs)
         
         if [[ "$response" != "y" ]] && [[ "$response" != "yes" ]]; then
             log INFO "Installation cancelled"
-            echo ""
+            log INFO ""
             log INFO "To force reinstall: sudo rm -rf $INSTALL_DIR && curl ... | sudo bash"
-            echo ""
+            log INFO ""
             exit 0
         fi
         
@@ -178,7 +191,7 @@ check_prerequisites() {
         rm -rf "$INSTALL_DIR"
     fi
     
-    log SUCCESS "Prerequisites checked"
+    log SUCCESS "Check for prerequisites successful"
 }
 
 # ============================================================================
@@ -200,7 +213,7 @@ install_via_git() {
     
     git clone --quiet "$AEON_REPO" "$INSTALL_DIR"
     
-    log SUCCESS "Repository cloned"
+    log SUCCESS "Repository cloned successful"
 }
 
 #
@@ -238,7 +251,7 @@ install_via_download() {
     chmod +x "$INSTALL_DIR"/lib/*.py
     chmod +x "$INSTALL_DIR"/remote/*.sh
     
-    log SUCCESS "Components downloaded"
+    log SUCCESS "Components downloaded successful"
 }
 
 #
@@ -272,18 +285,18 @@ perform_installation() {
 # Displays completion message with next steps for the user
 #
 show_next_steps() {
-    echo ""
-    echo -e "${BOLD}${GREEN}════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD}${GREEN}  [SUCCESS] AEON Bootstrap Complete!${NC}"
-    echo -e "${BOLD}${GREEN}════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
     log INFO "Starting AEON installation..."
-    echo ""
-    
+    local seconds="30"
+    local i
+    for ((i=seconds; i>0; i--)); do
+        printf "\rPress any key to continue (auto in %2ds)\033[K" "$i"
+        if read -r -n 1 -s -t 1; then
+            break
+        fi
+    done
     # Auto-launch aeon-go.sh
     cd "$INSTALL_DIR"
-    exec bash aeon-go.sh
+    exec bash aeon_go.sh
 }
 
 # ============================================================================

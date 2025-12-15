@@ -17,6 +17,28 @@
 # Dependencies: sshpass, ssh, scp, bc, jq (optional)
 ################################################################################
 
+set -euo pipefail
+
+# ============================================================================
+# DEPENDENCIES
+# ============================================================================
+
+# Prevent double-loading
+[[ -n "${AEON_PARALLEL_LOADED:-}" ]] && return 0
+readonly AEON_PARALLEL_LOADED=1
+
+# Load dependencies
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
+    source "$SCRIPT_DIR/dependencies.sh" || source "/opt/aeon/lib/dependencies.sh" || {
+        echo "ERROR: Cannot find dependencies.sh" >&2
+        exit 1
+    }
+fi
+
+# load dependecies -if available
+load_dependencies "parallel.sh"
+
 # ============================================================================
 # GLOBAL VARIABLES
 # ============================================================================

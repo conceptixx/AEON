@@ -23,6 +23,26 @@
 set -euo pipefail
 
 # ============================================================================
+# DEPENDENCIES
+# ============================================================================
+
+# Prevent double-loading
+[[ -n "${AEON_REBOOT_LOADED:-}" ]] && return 0
+readonly AEON_REBOOT_LOADED=1
+
+# Load dependencies
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
+    source "$SCRIPT_DIR/dependencies.sh" || source "/opt/aeon/lib/dependencies.sh" || {
+        echo "ERROR: Cannot find dependencies.sh" >&2
+        exit 1
+    }
+fi
+
+# load dependecies -if available
+load_dependencies "reboot.sh"
+
+# ============================================================================
 # CONFIGURATION
 # ============================================================================
 
@@ -32,63 +52,18 @@ REBOOT_ENTRY_DELAY=90           # Wait after entry device reboot (seconds)
 REBOOT_ONLINE_TIMEOUT=300       # Max wait for devices to come online (5 min)
 REBOOT_HEALTH_CHECK_RETRIES=3   # Health check retry count
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-# ============================================================================
-# LOGGING
-# ============================================================================
-
-log() {
-    local level="$1"
-    shift
-    local message="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
-    # Log to file if available
-    if [[ -n "${AEON_LOG_DIR:-}" ]] && [[ -d "${AEON_LOG_DIR}" ]]; then
-        echo "[$timestamp] [$level] $message" >> "${AEON_LOG_DIR}/reboot.log"
-    fi
-    
-    case "$level" in
-        ERROR)
-            echo -e "${RED}❌ $message${NC}" >&2
-            ;;
-        WARN)
-            echo -e "${YELLOW}⚠️  $message${NC}"
-            ;;
-        INFO)
-            echo -e "${CYAN}ℹ️  $message${NC}"
-            ;;
-        SUCCESS)
-            echo -e "${GREEN}✅ $message${NC}"
-            ;;
-        STEP)
-            echo -e "${BOLD}${CYAN}▶ $message${NC}"
-            ;;
-    esac
-}
-
-print_header() {
-    echo ""
-    echo -e "${BOLD}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD}  $1${NC}"
-    echo -e "${BOLD}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-}
-
 # ============================================================================
 # DEVICE CLASSIFICATION
 # ============================================================================
 
 classify_devices() {
-    local role_assignments_file="$1"
-    local entry_device_ip="$2"
+    local role_assignments_file="${1:-}"
+    local entry_device_ip="${2:-}"
+    
+    if [[ -z "$role_assignments_file" ]] || [[ ! -f "$role_assignments_file" ]]; then
+        log ERROR "Invalid role assignments file: $role_assignments_file"
+        return 1
+    fi
     
     log STEP "Classifying devices for reboot order..."
     
@@ -119,7 +94,12 @@ classify_devices() {
 # ============================================================================
 
 check_devices_need_reboot() {
-    local results_file="$1"
+    local results_file="${1:-}"
+    
+    if [[ ! -f "$results_file" ]]; then
+        log ERROR "Results file not found: $results_file"
+        return 1
+    fi
     
     log STEP "Checking which devices require reboot..."
     
@@ -253,7 +233,11 @@ verify_cluster_health() {
     local user="${2:-aeon}"
     local password="${3:-}"
     
-    log STEP "Verifying cluster health after reboot..."
+    if [[ ${#devices[@]} -eq 0 ]]; then
+        return 0
+    fi
+    
+    log STEP "Verifying cluster health (${#devices[@]} device(s))..."
     
     local healthy=0
     local unhealthy=0
@@ -266,14 +250,11 @@ verify_cluster_health() {
         fi
     done
     
-    log INFO "Health check results: ${healthy} healthy, ${unhealthy} unhealthy"
-    
     if [[ $unhealthy -gt 0 ]]; then
-        log WARN "Some devices are unhealthy, but continuing..."
-        return 0  # Non-critical, allow to continue
+        log WARN "$unhealthy device(s) failed health check"
     fi
     
-    log SUCCESS "All devices healthy"
+    log SUCCESS "$healthy device(s) healthy"
     return 0
 }
 
@@ -282,13 +263,33 @@ verify_cluster_health() {
 # ============================================================================
 
 synchronized_reboot() {
-    local role_assignments_file="$1"
-    local entry_device_ip="$2"
+    local role_assignments_file="${1:-}"
+    local entry_device_ip="${2:-}"
     local user="${3:-aeon}"
     local password="${4:-}"
     
+    # Validate required parameters
+    if [[ -z "$role_assignments_file" ]]; then
+        log ERROR "Role assignments file not specified"
+        log INFO "Usage: synchronized_reboot <role_assignments.json> <entry_ip> <user> <password>"
+        return 1
+    fi
+    
+    if [[ ! -f "$role_assignments_file" ]]; then
+        log ERROR "Role assignments file not found: $role_assignments_file"
+        log INFO "This file is created during role assignment phase"
+        log INFO "Run hardware detection and role assignment first"
+        return 1
+    fi
+    
+    if [[ -z "$entry_device_ip" ]]; then
+        log ERROR "Entry device IP not specified"
+        return 1
+    fi
+    
     print_header "Synchronized Cluster Reboot"
     
+    log INFO "Role assignments: $role_assignments_file"
     log INFO "Entry device: $entry_device_ip"
     log INFO "Reboot user: $user"
     echo ""
@@ -309,8 +310,10 @@ synchronized_reboot() {
     if [[ ${#WORKERS[@]} -gt 0 ]]; then
         print_header "Stage 1: Rebooting Workers"
         
+        log INFO "Rebooting ${#WORKERS[@]} worker(s) in parallel..."
+        
         reboot_devices WORKERS \
-            "Rebooting worker nodes" \
+            "Rebooting workers" \
             "$user" \
             "$password"
         
@@ -360,7 +363,7 @@ synchronized_reboot() {
                 log ERROR "This may cause cluster issues!"
                 
                 # Ask user if they want to continue
-                read -p "Continue with remaining reboots? [y/N] " -n 1 -r
+                read -p "Continue with remaining reboots? [y/N] " -n 1 -r < /dev/tty
                 echo
                 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
                     log ERROR "Reboot sequence aborted by user"
@@ -456,8 +459,13 @@ verify_reboot_completion() {
 # ============================================================================
 
 dry_run_reboot() {
-    local role_assignments_file="$1"
-    local entry_device_ip="$2"
+    local role_assignments_file="${1:-}"
+    local entry_device_ip="${2:-}"
+    
+    if [[ -z "$role_assignments_file" ]] || [[ ! -f "$role_assignments_file" ]]; then
+        log ERROR "Invalid role assignments file"
+        return 1
+    fi
     
     print_header "Synchronized Reboot - DRY RUN"
     

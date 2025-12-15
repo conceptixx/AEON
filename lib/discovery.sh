@@ -21,20 +21,21 @@ set -euo pipefail
 # DEPENDENCIES
 # ============================================================================
 
-# Auto-source common.sh if not already loaded
-if [[ -z "${AEON_COMMON_LOADED:-}" ]]; then
-    SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-    
-    # Try to source from lib directory
-    if [[ -f "$SCRIPT_DIR/common.sh" ]]; then
-        source "$SCRIPT_DIR/common.sh"
-    elif [[ -f "/opt/aeon/lib/common.sh" ]]; then
-        source "/opt/aeon/lib/common.sh"
-    else
-        echo "ERROR: Cannot find common.sh" >&2
-        return 1 2>/dev/null || exit 1
-    fi
+# Prevent double-loading
+[[ -n "${AEON_DISCOVERY_LOADED:-}" ]] && return 0
+readonly AEON_DISCOVERY_LOADED=1
+
+# Load dependencies
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
+    source "$SCRIPT_DIR/dependencies.sh" || source "/opt/aeon/lib/dependencies.sh" || {
+        echo "ERROR: Cannot find dependencies.sh" >&2
+        exit 1
+    }
 fi
+
+# load dependecies -if available
+load_dependencies "discovery.sh"
 
 # ============================================================================
 # CONFIGURATION
@@ -663,19 +664,9 @@ automated_discovery() {
     
     # Run discovery steps
     discover_network_devices "$network_range" || return 1
-    sleep 10
-
-    print_banner    
     test_ssh_accessibility "$ssh_user" "$ssh_password" || return 1
-    sleep 10
-
-    print_banner    
     classify_devices || return 1
-    sleep 10
-
-    print_banner    
     save_discovered_devices "$output_file" || return 1
-    sleep 10
     
     return 0
 }

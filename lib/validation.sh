@@ -21,16 +21,27 @@
 #   - lib/common.sh
 ################################################################################
 
-# Source dependencies
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh" || {
-    echo "ERROR: Failed to source common.sh" >&2
-    exit 1
-}
+set -euo pipefail
 
-# Prevent double-sourcing
+# ============================================================================
+# DEPENDENCIES
+# ============================================================================
+
+# Prevent double-loading
 [[ -n "${AEON_VALIDATION_LOADED:-}" ]] && return 0
 readonly AEON_VALIDATION_LOADED=1
+
+# Load dependencies
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
+    source "$SCRIPT_DIR/dependencies.sh" || source "/opt/aeon/lib/dependencies.sh" || {
+        echo "ERROR: Cannot find dependencies.sh" >&2
+        exit 1
+    }
+fi
+
+# load dependecies -if available
+load_dependencies "validation.sh"
 
 # ============================================================================
 # CONFIGURATION
