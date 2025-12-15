@@ -29,7 +29,7 @@ fi
 # SELF-CLEANUP AFTER PIPED EXECUTION
 # ============================================================================
 if [[ "${AEON_BOOTSTRAP_REEXEC:-}" == "true" ]]; then
-    trap 'rm -f "/tmp/aeon-bootstrap-$$.sh"' EXIT
+#    trap 'rm -f "/tmp/aeon-bootstrap-$$.sh"' EXIT
 fi
 
 # ============================================================================
