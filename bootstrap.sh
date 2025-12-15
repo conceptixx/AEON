@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 ################################################################################
 # AEON Bootstrap Installer
 # File: bootstrap.sh

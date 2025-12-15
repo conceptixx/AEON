@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 ################################################################################
 # AEON Main Orchestrator
 # File: aeon-go.sh

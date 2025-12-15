@@ -1,3 +1,4 @@
+#!/bin/bash
 # Source the module
 source /opt/aeon/lib/progress.sh
 
