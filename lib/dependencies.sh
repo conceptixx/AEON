@@ -157,7 +157,7 @@ load_single_module() {
     
     # Find module file
     local module_path=$(find_module "$module_name")
-    
+    echo "$module_name : $module_path/$module_name"
     if [[ -z "$module_path" ]]; then
         # Before common.sh is loaded, we can't use log()
         if is_module_loaded "common.sh"; then
