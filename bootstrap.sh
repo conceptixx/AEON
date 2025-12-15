@@ -286,7 +286,7 @@ perform_installation() {
 #
 show_next_steps() {
     log INFO "Starting AEON installation..."
-    local seconds="30"
+    local seconds=30
     local i
     for ((i=seconds; i>0; i--)); do
         printf "\rPress any key to continue (auto in %2ds)\033[K" "$i"
