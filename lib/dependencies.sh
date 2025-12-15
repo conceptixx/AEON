@@ -64,6 +64,25 @@ declare -A MODULE_DEPENDENCIES=(
     ["report.sh"]="common.sh progress.sh"
 )
 
+declare -A MODULES_LOADED=(
+    # Core modules (no dependencies except common.sh)
+    ["common.sh"]=""
+    ["progress.sh"]=""
+    
+    # main installer
+    ["aeon_go.sh"]=""
+    
+    # Phase modules (orchestrated by aeon-go.sh)
+    ["preflight.sh"]=""
+    ["discovery.sh"]=""
+    ["hardware.sh"]=""
+    ["validation.sh"]=""
+    ["parallel.sh"]=""
+    ["user.sh"]=""
+    ["reboot.sh"]=""
+    ["swarm.sh"]=""
+    ["report.sh"]=""
+)
 # ============================================================================
 # MODULE LOADING FUNCTIONS
 # ============================================================================
@@ -98,7 +117,9 @@ is_module_loaded() {
     local module_name="$1"
     local guard_name=$(get_load_guard_name "$module_name")
     
-    [[ -n "${!guard_name:-}" ]]
+    [[ "${MODULE_LOADED[$module_name]-}" == "$guard_name" ]]
+
+#    [[ -n "${!guard_name:-}" ]]
 }
 
 #
@@ -109,10 +130,10 @@ find_module() {
     local module_name="$1"
     
     # Try relative to current script directory
-    if [[ -f "$SCRIPT_DIR/$module_name" ]]; then
-        echo "$SCRIPT_DIR/$module_name"
-        return 0
-    fi
+#    if [[ -f "$SCRIPT_DIR/$module_name" ]]; then
+#        echo "$SCRIPT_DIR/$module_name"
+#        return 0
+#    fi
     
     # Try in LIB_DIR
     if [[ -f "$LIB_DIR/$module_name" ]]; then
@@ -148,7 +169,7 @@ load_single_module() {
         fi
         return 1
     fi
-    
+    echo "$module_name"
     # Source the module
     source "$module_path" || {
         if is_module_loaded "common.sh"; then
@@ -173,11 +194,9 @@ load_single_module() {
 #
 load_module_with_dependencies() {
     local module_name="$1"
-    echo "load_module_with_dependencies($module_name)"
     
     # Skip if already loaded
     if is_module_loaded "$module_name"; then
-        echo "load_module_with_dependencies($module_name) - loaded"
         return 0
     fi
     
@@ -187,7 +206,6 @@ load_module_with_dependencies() {
     # Load dependencies first (in order)
     if [[ -n "$deps" ]]; then
         for dep in $deps; do
-            echo "load_module_with_dependencies($module_name) -> $deps"
             load_module_with_dependencies "$dep" || return 1
         done
     fi
