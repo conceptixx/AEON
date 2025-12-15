@@ -50,7 +50,7 @@ declare -A MODULE_DEPENDENCIES=(
     ["progress.sh"]="common.sh"
     
     # main installer
-    ["aeon_go"]="common.sh progress.sh preflight.sh discovery.sh hardware.sh validation.sh parallel.sh user.sh reboot.sh swarm.sh report.sh"
+    ["aeon_go.sh"]="common.sh progress.sh preflight.sh discovery.sh hardware.sh validation.sh parallel.sh user.sh reboot.sh swarm.sh report.sh"
     
     # Phase modules (orchestrated by aeon-go.sh)
     ["preflight.sh"]="common.sh progress.sh"
