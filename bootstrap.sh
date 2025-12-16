@@ -232,7 +232,7 @@ bootstrap_main() {
     # Main installation orchestrator - tries git first, falls back to download
     #
     perform_installation() {
-        __echo 0 "Installing AEON..."
+        __echo 0 "Installing AEON... $keep_files"
         if ! $keep_files; then
             # Try git first, fallback to direct download
             if command -v git &>/dev/null; then
