@@ -49,7 +49,7 @@ bootstrap_main() {
     local install_dir="/opt/aeon"
 
     local lib_modules=(
-        "dependecies.sh"
+        "dependencies.sh"
         "common.sh"
         "progress.sh"
         "preflight.sh"
