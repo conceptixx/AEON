@@ -165,7 +165,7 @@ bootstrap_main() {
             if ! $force_remove; then
                 # remove only installation files
                 __echo 0 "   Removing existing installation (keep files)"
-                rm -f -- "${lib_modules[@]}/#/$install_dir/libs/"
+                rm -f -- "${lib_modules[@]}/#/$install_dir/lib/"
                 rm -f -- "${remote_scripts[@]}/#/$install_dir/remote/"
                 keep_files=true
             else
