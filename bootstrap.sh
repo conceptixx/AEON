@@ -273,7 +273,9 @@ bootstrap_main() {
     # Displays completion message and runs aeon_go.sh
     #
     run_aeon_go_installer() {
+        __echo 2 ""
         __echo 0 "   Starting AEON installation..."
+        __echo 2 ""
         # Auto-launch aeon-go.sh
         cd "$install_dir"
         exec bash aeon_go.sh
