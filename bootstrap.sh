@@ -220,7 +220,7 @@ echo "2."
         mkdir -p "$install_dir"/{lib,remote,config,data,secrets,logs,reports,docs,examples}
 echo "3."
         # Download main script
-        curl -fsSL "$aeon_raw/aeon-go.sh" -o "$install_dir/aeon-go.sh"
+        curl -fsSL "$aeon_raw/aeon_go.sh" -o "$install_dir/aeon_go.sh"
 echo "4."
         # Download lib modules
         for module in "${lib_modules[@]}"; do
