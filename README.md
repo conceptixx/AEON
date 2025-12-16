@@ -17,10 +17,16 @@
 ```bash
 # run regular
 curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash
+```
+```bash
 # run regular - no prompts
 curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash -s -- --yes
+```
+```bash
 # run regular - force remove - no prompts
 curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash -s -- --yes --force
+```
+```bash
 # run regular - force remove - no prompts - no output
 curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash -s -- --yes --force --silent
 ```
