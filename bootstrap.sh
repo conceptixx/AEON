@@ -13,7 +13,11 @@ if [[ "${AEON_BOOTSTRAP_REEXEC:-}" != "true" ]]; then
         TEMP_SCRIPT="/tmp/aeon-bootstrap-$$.sh"
         
         # Read script content and save to temp
-        cat > "$TEMP_SCRIPT"
+        {
+            echo '#!/usr/bin/env bash'
+            echo 'set -euo pipefail'
+            cat
+        } > "$TEMP_SCRIPT"
         chmod +x "$TEMP_SCRIPT"
         
         # Re-execute from temp file
