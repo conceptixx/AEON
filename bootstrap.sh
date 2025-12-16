@@ -331,7 +331,7 @@ bootstrap_main() {
     __show_silent_progress() {
         local indicator="$1"
         local prefix="Progress: "
-        if $silent_mode; then
+        if (( output_mode == 2 )); then
             # Prefix on first run
             if ! $progress; then
                 printf 'progress: '
