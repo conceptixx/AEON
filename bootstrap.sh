@@ -265,19 +265,10 @@ bootstrap_main() {
     #
     run_aeon_go_installer() {
         __echo 0 "   Starting AEON installation..."
-#        local seconds=30
-#        local i
-#        for ((i=seconds; i>0; i--)); do
-#            printf "\rPress any key to continue (auto in %2ds)\033[K" "$i"
-#            if read -r -n 1 -s -t 1; then
-#                break
-#            fi
-#        done
-    # Auto-launch aeon-go.sh
-    sleep 20
-    cd "$install_dir"
-    exec bash aeon_go.sh
-}
+        # Auto-launch aeon-go.sh
+        cd "$install_dir"
+        exec bash aeon_go.sh
+    }
 
     # ============================================================================
     # MAIN EXECUTION
