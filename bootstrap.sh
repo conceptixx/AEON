@@ -216,10 +216,8 @@ bootstrap_main() {
         fi
         # Create directory structure
         mkdir -p "$install_dir"/{lib,remote,config,data,secrets,logs,reports,docs,examples}
-echo "pulling $aeon_raw/aeon_go.sh -> $install_dir/aeon_go.sh"
         # Download main script
         curl -fsSL "$aeon_raw/aeon_go.sh" -o "$install_dir/aeon_go.sh"
-echo "4."
         # Download lib modules
         for module in "${lib_modules[@]}"; do
             echo 0 "loading ... $aeon_raw/lib/$module -> $install_dir/lib/$module"
@@ -307,6 +305,11 @@ echo "4."
         echo " version: $version"
         echo ""
     }
+
+    #
+    # __show_help
+    # shows help screen
+    #
     __show_help() {
         print_banner
         echo -e "${yellow}${bold}Usage:${nocolor}"
@@ -321,6 +324,11 @@ echo "4."
         echo -e "   -f, --force             ${yellow}Force reinstall${nocolor}"
         echo ""
     }
+
+    #
+    # __echo
+    # modified echo to track quiet and silent mode
+    #
     __echo() {
         local min_mode="${1}"
         shift
