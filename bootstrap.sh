@@ -80,6 +80,8 @@ bootstrap_main() {
     local skip_prompts=false
     local force_remove=false
     local keep_files=false
+    
+    local progress=false
 
     # ============================================================================
     # BANNER
@@ -121,7 +123,7 @@ bootstrap_main() {
     # Verifies the script is running with root privileges
     #
     check_root() {
-            __echo 0 "Checking sudo ..."
+        __echo 0 "Checking sudo ..."
         if [[ $EUID -ne 0 ]]; then
             __echo 2 "${red}${bold}This script must be run as root${nocolor}"
             __echo 0 ""
@@ -131,6 +133,7 @@ bootstrap_main() {
             exit 1
         fi
         __echo 0 " - Check for root user ${green}${bold}successful${nocolor}"
+        __show_silent_progress 5
     }
 
     #
@@ -179,6 +182,7 @@ bootstrap_main() {
             fi
         fi
         __echo 0  " - Check for prerequisites ${green}${bold}successful${nocolor}"
+        __show_silent_progress 15
     }
 
     # ============================================================================
@@ -201,6 +205,7 @@ bootstrap_main() {
         # clone git repo
         git clone --quiet "$aeon_repo" "$install_dir"
         __echo 0 " - Repository cloned ${green}${bold}successful${nocolor}"
+        __show_silent_progress 45
     }
 
     #
@@ -218,16 +223,19 @@ bootstrap_main() {
         mkdir -p "$install_dir"/{lib,remote,config,data,secrets,logs,reports,docs,examples}
         # Download main script
         curl -fsSL "$aeon_raw/aeon_go.sh" -o "$install_dir/aeon_go.sh"
+        __show_silent_progress 3
         # Download lib modules
         for module in "${lib_modules[@]}"; do
             echo 0 "loading ... $aeon_raw/lib/$module -> $install_dir/lib/$module"
             curl -fsSL "$aeon_raw/lib/$module" -o "$install_dir/lib/$module"
             chmod +x "$install_dir/lib/$module"
+            __show_silent_progress 3
         done
         # Download remote scripts
         for script in "${remote_scripts[@]}"; do
             curl -fsSL "$aeon_raw/remote/$script" -o "$install_dir/remote/$script"
             chmod +x "$install_dir/remote/$script"
+            __show_silent_progress 3
         done
         __echo 0 " - Components downloaded ${green}${bold}successful${nocolor}"
     }
@@ -253,6 +261,7 @@ bootstrap_main() {
         # Set permissions
         chmod 755 "$install_dir"
         __echo 0 "   AEON setup prepared ($install_dir/aeon_go.sh)"
+        __show_silent_progress 5
     }
 
     # ============================================================================
@@ -280,7 +289,6 @@ bootstrap_main() {
     #
     main() {
         print_banner
-
         check_root
         check_previous_install
         perform_installation
@@ -316,6 +324,22 @@ bootstrap_main() {
         echo ""
     }
 
+    #
+    # __show_silent_progress
+    # shows a quick progress for the installation
+    #
+    __show_silent_progress() {
+        local indicator="$1"
+        local prefix="Progress: "
+        if $silent_mode; then
+            # Prefix on first run
+            if ! $progress; then
+                printf 'progress: '
+                progress=true
+            fi
+            printf '%*s' "$count" '' | tr ' ' "."
+        fi        
+    }
     #
     # __echo
     # modified echo to track quiet and silent mode
