@@ -37,298 +37,343 @@ fi
 # ============================================================================
 set -euo pipefail
 
-# Configuration
-AEON_REPO="https://github.com/conceptixx/AEON.git"
-AEON_RAW="https://raw.githubusercontent.com/conceptixx/AEON/main"
-INSTALL_DIR="/opt/aeon"
+bootstrap_main() {
 
-LIB_MODULES=(
-    "dependecies.sh"
-    "common.sh"
-    "progress.sh"
-    "preflight.sh"
-    "discovery.sh"
-    "hardware.sh"
-    "validation.sh"
-    "parallel.sh"
-    "user.sh"
-    "reboot.sh"
-    "swarm.sh"
-    "report.sh"
-    "scoring.py"
-)
+    #    Configuration
+    local aeon_repo="https://github.com/conceptixx/AEON.git"
+    local aeon_raw="https://raw.githubusercontent.com/conceptixx/AEON/main"
+    local install_dir="/opt/aeon"
 
-REMOTE_SCRIPTS=(
-    "dependencies.remote.sh"
-    "hardware.remote.sh"
-)
-
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-# ============================================================================
-# BANNER
-# ============================================================================
-
-#
-# print banner
-# Displays the AEON ASCII art logo and bootstrap title
-#
-print_banner() {
-    clear
-    local logo_lines=(
-        "   █████╗  ███████╗  ██████╗  ███╗   ██╗ "
-        "  ██╔══██╗ ██╔════╝ ██╔═══██╗ ████╗  ██║ "
-        "  ███████║ █████╗   ██║   ██║ ██╔██╗ ██║ "
-        "  ██╔══██║ ██╔══╝   ██║   ██║ ██║╚██╗██║ "
-        "  ██║  ██║ ███████╗ ╚██████╔╝ ██║ ╚████║ "
-        "  ╚═╝  ╚═╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═══╝ "
-        ""
-        "Autonomous Evolving Orchestration Network"
+    local lib_modules=(
+        "dependecies.sh"
+        "common.sh"
+        "progress.sh"
+        "preflight.sh"
+        "discovery.sh"
+        "hardware.sh"
+        "validation.sh"
+        "parallel.sh"
+        "user.sh"
+        "reboot.sh"
+        "swarm.sh"
+        "report.sh"
+        "scoring.py"
     )
-    
-    for line in "${logo_lines[@]}"; do
-        local text_length=${#line}
-        local padding=$(( (80 - text_length) / 2 ))
-        printf "%${padding}s%s\n" "" "$line"
-    done
-    
-    echo ""
-}
 
-#
-# log $level $message
-# Logs messages with appropriate color coding and formatting
-#
-log() {
-    local level="$1"
-    shift
-    local message="$*"
-    
-    case "$level" in
-        ERROR)
-            echo -e "${RED}[ERROR] $message${NC}" >&2
-            ;;
-        WARN)
-            echo -e "${YELLOW}[WARNING]  $message${NC}"
-            ;;
-        INFO)
-            echo -e "${CYAN}[INFO]  $message${NC}"
-            ;;
-        SUCCESS)
-            echo -e "${GREEN}[SUCCESS] $message${NC}"
-            ;;
-        STEP)
-            echo -e "${BOLD}${BLUE}[STEP] $message${NC}"
-            ;;
-    esac
-}
+    local remote_scripts=(
+        "dependencies.remote.sh"
+        "hardware.remote.sh"
+    )
 
-# ============================================================================
-# PRE-CHECKS
-# ============================================================================
+    # Colors
+    local red='\033[0;31m'
+    local green='\033[0;32m'
+    local yellow='\033[1;33m'
+    local bold='\033[1m'
+    local nocolor='\033[0m'
 
-#
-# check_root
-# Verifies the script is running with root privileges
-#
-check_root() {
-    log STEP "Checking sudo ..."
-    if [[ $EUID -ne 0 ]]; then
-        log ERROR "This script must be run as root"
-        log INFO ""
-        log INFO "Please run:"
-        log INFO "  curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash"
-        log INFO ""
-        exit 1
-    fi
-    log SUCCESS "Check for root user successful"
-}
+    # ============================================================================
+    # BANNER
+    # ============================================================================
 
-#
-# check_prerequisites
-# Checks if AEON is already installed and handles reinstallation
-#
-check_prerequisites() {
-    log STEP "Checking prerequisites ..."
-    
-    # Check if already installed
-    if [[ -d "$INSTALL_DIR" ]]; then
-        log WARN "AEON is already installed at $INSTALL_DIR"
-        log INFO ""
-        
-        # Check if we can access terminal
-        if [[ -t 1 ]] && [[ -c /dev/tty ]]; then
-            # Interactive mode - read from TTY
-            log INFO "Reinstall? [y/N]: "
-            read -r response < /dev/tty
-        else
-            # Non-interactive - default to no
-            log INFO "Reinstall? [y/N]: n (non-interactive mode)"
-            response="n"
-        fi
-        
-        log INFO ""
-        
-        # Normalize response
-        response=$(echo "$response" | tr '[:upper:]' '[:lower:]' | xargs)
-        
-        if [[ "$response" != "y" ]] && [[ "$response" != "yes" ]]; then
-            log INFO "Installation cancelled"
-            log INFO ""
-            log INFO "To force reinstall: sudo rm -rf $INSTALL_DIR && curl ... | sudo bash"
-            log INFO ""
-            exit 0
-        fi
-        
-        log WARN "Removing existing installation..."
-        rm -rf "$INSTALL_DIR"
-    fi
-    
-    log SUCCESS "Check for prerequisites successful"
-}
+    #
+    # print banner
+    # Displays the AEON ASCII art logo
+    #
+    print_banner() {
+        clear
+        # define AEON logo
+        local logo_lines=(
+            "   █████╗  ███████╗  ██████╗  ███╗   ██╗ "
+            "  ██╔══██╗ ██╔════╝ ██╔═══██╗ ████╗  ██║ "
+            "  ███████║ █████╗   ██║   ██║ ██╔██╗ ██║ "
+            "  ██╔══██║ ██╔══╝   ██║   ██║ ██║╚██╗██║ "
+            "  ██║  ██║ ███████╗ ╚██████╔╝ ██║ ╚████║ "
+            "  ╚═╝  ╚═╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═══╝ "
+            ""
+            "Autonomous Evolving Orchestration Network"
+        )
+        # print AEON logo centered
+        for line in "${logo_lines[@]}"; do
+            local text_length=${#line}
+            local padding=$(( (80 - text_length) / 2 ))
+            printf "%${padding}s%s\n" "" "$line"
+        done
+        # print linebreak
+        echo ""
+    }
 
-# ============================================================================
-# INSTALLATION
-# ============================================================================
+    # ============================================================================
+    # PRE-CHECKS
+    # ============================================================================
 
-#
-# install_via_git
-# Installs AEON by cloning the GitHub repository
-#
-install_via_git() {
-    log STEP "Cloning AEON repository..."
-    
-    if ! command -v git &>/dev/null; then
-        log WARN "Git not found, installing..."
-        apt-get update -qq
-        apt-get install -y -qq git
-    fi
-    
-    git clone --quiet "$AEON_REPO" "$INSTALL_DIR"
-    
-    log SUCCESS "Repository cloned successful"
-}
-
-#
-# install_via_download
-# Installs AEON by downloading individual files directly
-#
-install_via_download() {
-    log STEP "Downloading AEON components..."
-    
-    # Ensure curl/wget available
-    if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
-        apt-get update -qq
-        apt-get install -y -qq curl wget
-    fi
-    
-    # Create directory structure
-    mkdir -p "$INSTALL_DIR"/{lib,remote,config,data,secrets,logs,reports,docs,examples}
-    
-    # Download main script
-    curl -fsSL "$AEON_RAW/aeon-go.sh" -o "$INSTALL_DIR/aeon-go.sh"
-    
-    # Download lib modules
-    for module in "${LIB_MODULES[@]}"; do
-        curl -fsSL "$AEON_RAW/lib/$module" -o "$INSTALL_DIR/lib/$module"
-    done
-    
-    # Download remote scripts
-    for script in "${REMOTE_SCRIPTS[@]}"; do
-        curl -fsSL "$AEON_RAW/remote/$script" -o "$INSTALL_DIR/remote/$script"
-    done
-    
-    # Make executable
-    chmod +x "$INSTALL_DIR"/*.sh
-    chmod +x "$INSTALL_DIR"/lib/*.sh
-    chmod +x "$INSTALL_DIR"/lib/*.py
-    chmod +x "$INSTALL_DIR"/remote/*.sh
-    
-    log SUCCESS "Components downloaded successful"
-}
-
-#
-# perform_installation
-# Main installation orchestrator - tries git first, falls back to download
-#
-perform_installation() {
-    log STEP "Installing AEON..."
-    echo ""
-    
-    # Try git first, fallback to direct download
-    if command -v git &>/dev/null; then
-        install_via_git
-    else
-        log WARN "Git not available, using direct download"
-        install_via_download
-    fi
-    
-    # Set permissions
-    chmod 755 "$INSTALL_DIR"
-    
-    log SUCCESS "AEON installed to $INSTALL_DIR"
-}
-
-# ============================================================================
-# POST-INSTALLATION
-# ============================================================================
-
-#
-# show_next_steps
-# Displays completion message with next steps for the user
-#
-show_next_steps() {
-    log INFO "Starting AEON installation..."
-#    local seconds=30
-#    local i
-#    for ((i=seconds; i>0; i--)); do
-#        printf "\rPress any key to continue (auto in %2ds)\033[K" "$i"
-#        if read -r -n 1 -s -t 1; then
-#            break
-#        fi
-#    done
-    # Load dependencies
-    SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-    if [[ -z "${AEON_DEPENDENCIES_LOADED:-}" ]]; then
-       source "/opt/aeon/lib/dependencies.sh" || {
-            echo "ERROR: Cannot find dependencies.sh" >&2
+    #
+    # check_root
+    # Verifies the script is running with root privileges
+    #
+    check_root() {
+            __echo 0 "Checking sudo ..."
+        if [[ $EUID -ne 0 ]]; then
+            __echo 2 "${red}${bold}This script must be run as root${nocolor}"
+            __echo 0 ""
+            __echo 1 "${yellow}Please run:${nocolor}"
+            __echo 1 "${yellow}  curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash${nocolor}"
+            __echo 0 ""
             exit 1
-        }
-    fi
+        fi
+        __echo 0 " - Check for root user ${green}${bold}successful${nocolor}"
+    }
 
-    # load dependecies -if available
-    load_dependencies "aeon_go.sh"
+    #
+    # check_previous_install
+    # Checks if AEON is already installed and handles reinstallation
+    #
+    check_previous_install() {
+        # check for previous installation
+        __echo 0 "Checking prerequisites ..."
+        # Check if already installed
+        if [[ -d "$install_dir" ]]; then
+            # previous installation detected
+            __echo 1 "   ${yellow}AEON is already installed at $install_dir${nocolor}"
+            if ! $skip_prompts; then
+                # Check if we can access terminal
+                if [[ -t 1 ]] && [[ -c /dev/tty ]]; then
+                    printf "   Reinstall? [y/N]: " > /dev/tty
+                    read -r response < /dev/tty
+                else
+                    # Non-interactive - default to no
+                    printf "   Reinstall? [y/N]: n (non-interactive mode)" >&2
+                    response="n"
+                fi
+                # Normalize response
+                response=$(echo "$response" | tr '[:upper:]' '[:lower:]' | xargs)
+                # cancel if not confirmed
+                if [[ "$response" != "y" ]] && [[ "$response" != "yes" ]]; then
+                    __echo 2 " - Installation ${red}${bold}cancelled${nocolor}"
+                    __echo 0 ""
+                    __echo 1 "   ${yellow}To force reinstall run:${nocolor}"
+                    __echo 1 "   ${yellow}curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh ${red}--force${yellow} | sudo bash${nocolor}"
+                    __echo 0 ""
+                    exit 0
+                fi
+            fi
+            if ! $force_remove; then
+                # remove only installation files
+                __echo 0 "   Removing existing installation (keep files)"
+                rm -f -- "${lib_modules[@]}/#/$install_dir/libs/"
+                rm -f -- "${remote_scripts[@]}/#/$install_dir/remote/"
+            else
+                # remove previuos installation
+                __echo 0 "   Removing existing installation (remove files)"
+                rm -rf "$install_dir"
+            fi
+        fi
+        __echo 0  " - Check for prerequisites ${green}${bold}successful${nocolor}"
+    }
+
+    # ============================================================================
+    # INSTALLATION
+    # ============================================================================
+
+    #
+    # install_via_git
+    # Installs AEON by cloning the GitHub repository
+    #
+    install_via_git() {
+        # try to clone git repo
+        __echo 0 "   Cloning AEON repository..."
+        # if git command not available download and install git
+        if ! command -v git &>/dev/null; then
+            __echo 1 "   ${yellow}Git not found, installing git${nocolor}"
+            apt-get update -qq
+            apt-get install -y -qq git
+        fi
+        # clone git repo
+        git clone --quiet "$aeon_repo" "$install_dir"
+        __echo 0 " - Repository cloned ${green}${bold}successful${nocolor}"
+    }
+
+    #
+    # install_via_download
+    # Installs AEON by downloading individual files directly
+    #
+    install_via_download() {
+        __echo 0 "   Downloading AEON components..."
+        # Ensure curl/wget available
+        if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
+            apt-get update -qq
+            apt-get install -y -qq curl wget
+        fi
+        # Create directory structure
+        mkdir -p "$install_dir"/{lib,remote,config,data,secrets,logs,reports,docs,examples}
+        # Download main script
+        curl -fsSL "$aeon_raw/aeon-go.sh" -o "$install_dir/aeon-go.sh"
+        # Download lib modules
+        for module in "${lib_modules[@]}"; do
+            curl -fsSL "$aeon_raw/lib/$module" -o "$install_dir/lib/$module"
+            chmod +x "$install_dir/lib/$module"
+        done
+        # Download remote scripts
+        for script in "${remote_scripts[@]}"; do
+            curl -fsSL "$aeon_raw/remote/$script" -o "$install_dir/remote/$script"
+            chmod +x "$install_dir/remote/$script"
+        done
+        __echo 0 " - Components downloaded ${green}${bold}successful${nocolor}"
+    }
+
+    #
+    # perform_installation
+    # Main installation orchestrator - tries git first, falls back to download
+    #
+    perform_installation() {
+        __echo 0 "Installing AEON..."
+        # Try git first, fallback to direct download
+        if command -v git &>/dev/null; then
+            install_via_git
+        else
+            __echo 1 "   ${yellow}Git not available, using direct download${nocolor}"
+            install_via_download
+        fi
+        # Set permissions
+        chmod 755 "$install_dir"
+        __echo 0 "   AEON setup prepared ($install_dir/aeon_go.sh)"
+    }
+
+    # ============================================================================
+    # POST-INSTALLATION
+    # ============================================================================
+
+    #
+    # run_aeon_go_installer
+    # Displays completion message and runs aeon_go.sh
+    #
+    run_aeon_go_installer() {
+        __echo 0 "   Starting AEON installation..."
+#        local seconds=30
+#        local i
+#        for ((i=seconds; i>0; i--)); do
+#            printf "\rPress any key to continue (auto in %2ds)\033[K" "$i"
+#            if read -r -n 1 -s -t 1; then
+#                break
+#            fi
+#        done
     # Auto-launch aeon-go.sh
-    cd "$INSTALL_DIR"
+    sleep 20
+    cd "$install_dir"
     exec bash aeon_go.sh
 }
 
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
+    # ============================================================================
+    # MAIN EXECUTION
+    # ============================================================================
 
-#
-# main
-# Main execution function - orchestrates the bootstrap process
-#
-main() {
-    print_banner
+    #
+    # main
+    # Main execution function - orchestrates the bootstrap process
+    #
+    main() {
+        print_banner
+
+        check_root
+        check_previous_install
+        perform_installation
+        run_aeon_go_installer
+    }
     
-    check_root
-    check_prerequisites
-    perform_installation
-    show_next_steps
-}
+    #
+    # __show_version
+    # shows the version of the bootstrap.sh file
+    #
+    __show_version() {
+        print_banner
+        echo " version: $version"
+        echo ""
+    }
+    __show_help() {
+        print_banner
+        echo -e "${yellow}${bold}Usage:${nocolor}"
+        echo -e "   curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh ${yellow}[OPTIONS]${nocolor} | sudo bash"
+        echo ""
+        echo -e "${yellow}${bold}Options:${nocolor}"
+        echo -e "   -h, --help              ${yellow}Show this help${nocolor}"
+        echo -e "   -V, --version           ${yellow}Show version${nocolor}"
+        echo -e "   -q, --quiet             ${yellow}Reduce output${nocolor}"
+        echo -e "   -qq, --silent           ${yellow}Cancel output${nocolor}"
+        echo -e "   -y, --yes               ${yellow}Assume ${green}yes${yellow} for prompts${nocolor}"
+        echo -e "   -f, --force             ${yellow}Force reinstall${nocolor}"
+        echo ""
+    }
+    __echo() {
+        local min_mode="${1}"
+        shift
+        local output="$*"
+        if (( min_mode >= output_mode )); then
+            printf '%b\n' "$output"
+        fi
+    }
 
+    # dispatcher
+    local output_mode=0
+    local skip_prompts=false
+    local force_remove=false
+
+    while (($#)); do
+        arg="$1"
+
+        # Only normalize long options (case-insensitive for --something)
+        if [[ "$arg" == --* ]]; then
+            arg="${arg,,}"   # lowercase (bash)
+            fi
+        # check for options
+        case "$arg" in
+            # show help screen
+            -h|--help)
+            __show_help
+            exit 0
+            ;;
+            # show version
+            -V|--version)
+            __show_version
+            exit 0
+            ;;
+            # turn on quiet mode
+            -q|--quiet)
+            output_mode=$((output_mode + 1))
+            shift
+            continue
+            ;;
+            # turn on silent mode
+            -qq|--silent)
+            output_mode=$((output_mode + 2))
+            shift
+            continue
+            ;;
+            # skip prompts
+            -y|--yes)
+            skip_prompts=true
+            shift
+            continue
+            ;;
+            # force remove
+            -f|--force)
+            force_remove=true
+            shift
+            continue
+            ;;
+
+            *)
+            # positional arg
+            __show_help
+            exit 0
+            ;;
+        esac
+    done
+    
+    main
+}
 #
 # automatic execution
 # entrypoint main
 #
-main "$@"
+bootstrap_main "$@"
+
