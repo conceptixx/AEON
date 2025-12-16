@@ -161,7 +161,7 @@ bootstrap_main() {
                     __echo 2 " - Installation ${red}${bold}cancelled${nocolor}"
                     __echo 0 ""
                     __echo 1 "   ${yellow}To force reinstall run:${nocolor}"
-                    __echo 1 "   ${yellow}curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh ${red}--force${yellow} | sudo bash${nocolor}"
+                    __echo 1 "   ${yellow}curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash ${red} -s -- --force${yellow}${nocolor}"
                     __echo 0 ""
                     exit 0
                 fi
@@ -220,6 +220,7 @@ bootstrap_main() {
         curl -fsSL "$aeon_raw/aeon-go.sh" -o "$install_dir/aeon-go.sh"
         # Download lib modules
         for module in "${lib_modules[@]}"; do
+            echo 0 "loading ... $aeon_raw/lib/$module -> $install_dir/lib/$module"
             curl -fsSL "$aeon_raw/lib/$module" -o "$install_dir/lib/$module"
             chmod +x "$install_dir/lib/$module"
         done
@@ -307,7 +308,7 @@ bootstrap_main() {
     __show_help() {
         print_banner
         echo -e "${yellow}${bold}Usage:${nocolor}"
-        echo -e "   curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh ${yellow}[OPTIONS]${nocolor} | sudo bash"
+        echo -e "   curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash ${yellow}-s -- [OPTIONS]${nocolor}"
         echo ""
         echo -e "${yellow}${bold}Options:${nocolor}"
         echo -e "   -h, --help              ${yellow}Show this help${nocolor}"
