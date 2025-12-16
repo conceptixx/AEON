@@ -72,6 +72,11 @@ bootstrap_main() {
     local bold='\033[1m'
     local nocolor='\033[0m'
 
+    local output_mode=0
+    local skip_prompts=false
+    local force_remove=false
+    local keep_files=false
+
     # ============================================================================
     # BANNER
     # ============================================================================
@@ -162,6 +167,7 @@ bootstrap_main() {
                 __echo 0 "   Removing existing installation (keep files)"
                 rm -f -- "${lib_modules[@]}/#/$install_dir/libs/"
                 rm -f -- "${remote_scripts[@]}/#/$install_dir/remote/"
+                keep_files=true
             else
                 # remove previuos installation
                 __echo 0 "   Removing existing installation (remove files)"
@@ -227,11 +233,16 @@ bootstrap_main() {
     #
     perform_installation() {
         __echo 0 "Installing AEON..."
-        # Try git first, fallback to direct download
-        if command -v git &>/dev/null; then
-            install_via_git
+        if ! $keep_files; then
+            # Try git first, fallback to direct download
+            if command -v git &>/dev/null; then
+                install_via_git
+            else
+                __echo 1 "   ${yellow}Git not available, using direct download${nocolor}"
+                install_via_download
+            fi
         else
-            __echo 1 "   ${yellow}Git not available, using direct download${nocolor}"
+            __echo 1 "   keeping files, ${yellow}using direct download${nocolor}"
             install_via_download
         fi
         # Set permissions
@@ -313,10 +324,6 @@ bootstrap_main() {
     }
 
     # dispatcher
-    local output_mode=0
-    local skip_prompts=false
-    local force_remove=false
-
     while (($#)); do
         arg="$1"
 
