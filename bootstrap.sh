@@ -209,15 +209,19 @@ bootstrap_main() {
     #
     install_via_download() {
         __echo 0 "   Downloading AEON components..."
+echo "1."
         # Ensure curl/wget available
         if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
             apt-get update -qq
             apt-get install -y -qq curl wget
         fi
+echo "2."
         # Create directory structure
         mkdir -p "$install_dir"/{lib,remote,config,data,secrets,logs,reports,docs,examples}
+echo "3."
         # Download main script
         curl -fsSL "$aeon_raw/aeon-go.sh" -o "$install_dir/aeon-go.sh"
+echo "4."
         # Download lib modules
         for module in "${lib_modules[@]}"; do
             echo 0 "loading ... $aeon_raw/lib/$module -> $install_dir/lib/$module"
