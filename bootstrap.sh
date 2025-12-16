@@ -337,7 +337,7 @@ bootstrap_main() {
                 printf 'progress: '
                 progress=true
             fi
-            printf '%*s' "$count" '' | tr ' ' "."
+            printf '%*s' "$indicator" '' | tr ' ' "."
         fi        
     }
     #
