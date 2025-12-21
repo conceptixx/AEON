@@ -1,0 +1,47 @@
+{
+  "schema": "aeon.instructions",
+  "version": "1.0",
+  "id": "install.entry",
+  "refs": {
+    "configs": {
+      "cursed": "/manifest/config/manifest.config.cursed.json"
+    },
+    "instructions": {
+      "compose_gen": "/manifest/compose.generator.json"
+    }
+  },
+  "expected_files": [
+    {
+      "path": "/manifest/config/manifest.config.cursed.json",
+      "policy": "required_now"
+    },
+    {
+      "path": "/manifest/generated/docker.compose.json",
+      "policy": "required_eventually"
+    }
+  ],
+  "flows": {
+    "interactive": [
+      {
+        "id": "menu_selection",
+        "action": "ui.curses.menu",
+        "args": {
+          "prompt": "Select services to install",
+          "options": ["tailscale", "nginx", "postgres"]
+        }
+      }
+    ],
+    "noninteractive": [
+      {
+        "id": "default_selection",
+        "action": "apply.defaults",
+        "args": {}
+      }
+    ]
+  },
+  "outputs": {
+    "result": "/runtime/last_result.json",
+    "plan": null,
+    "stdout_summary": true
+  }
+}

@@ -2,7 +2,7 @@
 # AEON Installation Script
 # Supports: Linux (Ubuntu/Debian/Raspbian), macOS, WSL
 # Bash 3.2+ compatible
-# VERSION: 6.1.0
+# VERSION: 1.0.0.v7.1 stable
 
 set -euo pipefail
 
