@@ -6,93 +6,144 @@
 ################################################################################
 
 # ============================================================================
-# SELF-EXTRACTION FOR PIPED EXECUTION
+# BOOTSTRAP MAIN CLASS
 # ============================================================================
-if [[ "${AEON_BOOTSTRAP_REEXEC:-}" != "true" ]]; then
-    if [[ ! -t 0 ]]; then
-        TEMP_SCRIPT="/tmp/aeon-bootstrap-$$.sh"
-        
-        # Read script content and save to temp
-        {
-            echo '#!/usr/bin/env bash'
-            echo 'set -euo pipefail'
-            cat
-        } > "$TEMP_SCRIPT"
-        chmod +x "$TEMP_SCRIPT"
-        
-        # Re-execute from temp file
-        AEON_BOOTSTRAP_REEXEC=true exec "$TEMP_SCRIPT" "$@"
-        
-        # Cleanup on failure
-        rm -f "$TEMP_SCRIPT"
-        exit 1
-    fi
-fi
-
-# ============================================================================
-# SELF-CLEANUP AFTER PIPED EXECUTION
-# ============================================================================
-if [[ "${AEON_BOOTSTRAP_REEXEC:-}" == "true" ]]; then
-    trap 'rm -f "/tmp/aeon-bootstrap-$$.sh"' EXIT
-fi
-
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
-set -euo pipefail
-
 bootstrap_main() {
 
-    #    Configuration
+    # set pipfail
+    set -euo pipefail
+    
+    readonly EXIT_OK=0
+    readonly EXIT_ENVIR=1
+    readonly EXIT_SUDO=2
+    readonly EXIT_DEPENDENCY=3
+    readonly EXIT_INFO=4
+    readonly EXIT_TEST=5
+
+    # declare exit-codes
+    local -r exit_codes=(
+        "ok / successful"
+        "unsupported (windows/unknown) environment"
+        "missing permissions for sudo or root"
+    )
+
+# ============================================================================
+# BOOTSTRAP MAIN CLASS
+# ============================================================================
+
+    # error_code
+    # writes error code
+    on_error() {
+        local code="$1"
+        shift
+        printf '[aeon-bootstrap][${code}] %s\n' "$*" >&2;
+    }
+
+    # on_exit
+    # display an exit code message at the end of error output
+    on_exit() {
+        local rc=$?
+        if [[ "$rc" -ne 0 ]]; then
+            on_error  "CODE" "error-code $rc : ${exit_codes[$rc]}"
+        fi
+    }
+
+    # trap on_exit as exit code
+    trap on_exit EXIT
+
+    # =========================================================================
+    # WINDOWS KILL
+    # BOOTSTRAP RE-EXEC (piped self-extract)
+    # BOOTSTRAP RE-EXEC (sudo elevation)
+    # CLEANUP
+    # =========================================================================
+
+    # Kill Git-Bash/MSYS/Cygwin on Windows (use bootstrap.ps1 instead)
+    case "$(uname -s 2>/dev/null || true)" in
+        MINGW*|MSYS*|CYGWIN*)
+            on_error "ERROR" "this bootstrap-script is not designed for git-bash/msys/cygwin"
+            on_error "ERROR" "start windows powershell"
+            on_error "ERROR" "\$u = \"https://raw.githubusercontent.com/conceptixx/aeon/main/bootstrap.ps1\""
+            on_error "ERROR" "\$dst = \"\$env:TEMP\aeon-bootstrap.ps1\""
+            on_error "ERROR" "iwr -useb \$u -OutFile \$dst"
+            on_error "ERROR" "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \$dst -c -w"
+            on_error "ERROR" "# add -n  (noninteractive)"
+            exit "$EXIT_ENVIR"
+            ;;
+    esac
+
+    # Self-extract when piped + 2) sudo re-exec once + 3) cleanup temp script
+    if [[ "${AEON_BOOTSTRAP_REEXEC_DONE:-}" != "true" ]]; then
+        # If started via pipe (curl|bash / wget|bash), write to temp file and re-exec from file
+        if [[ ! -t 0 ]]; then
+            AEON_BOOTSTRAP_TEMP_SCRIPT="$(mktemp /tmp/aeon-bootstrap.XXXXXX.sh)"
+            {
+                echo '#!/bin/bash'
+                echo 'set -euo pipefail'
+                cat
+            } > "$AEON_BOOTSTRAP_TEMP_SCRIPT"
+            chmod +x "$AEON_BOOTSTRAP_TEMP_SCRIPT"
+            AEON_BOOTSTRAP_REEXEC_DONE=true \
+            exec "$AEON_BOOTSTRAP_TEMP_SCRIPT" "$@" || { rm -f "$AEON_BOOTSTRAP_TEMP_SCRIPT"; exit "$EXIT_OK"; }
+        fi
+
+    # Ensure cleanup if running from a temp script (env var survives sudo re-exec below)
+        if [[ -n "${AEON_BOOTSTRAP_TEMP_SCRIPT:-}" ]]; then
+            trap 'rm -f "$AEON_BOOTSTRAP_TEMP_SCRIPT"' EXIT
+        fi
+
+    # Elevate to root once (no "forcing" beyond prompting when needed)
+        if [[ "$(id -u)" -ne 0 ]]; then
+            if command -v sudo >/dev/null 2>&1; then
+                AEON_BOOTSTRAP_REEXEC_DONE=true \
+                exec sudo -k -p "[aeon-bootstrap] sudo password: " \
+                env AEON_BOOTSTRAP_REEXEC_DONE=true \
+                AEON_BOOTSTRAP_TEMP_SCRIPT="${AEON_BOOTSTRAP_TEMP_SCRIPT:-}" \
+                bash "$0" "$@" || exit 2
+            else
+                on_error "ERROR" "sudo not found. Please run as root or install sudo."
+                exit "$EXIT_SUDO"
+            fi
+        fi
+        AEON_BOOTSTRAP_REEXEC_DONE=true
+    else
+    # If we already re-exec'd earlier, still ensure cleanup when temp script var is present
+        if [[ -n "${AEON_BOOTSTRAP_TEMP_SCRIPT:-}" ]]; then
+            trap 'rm -f "$AEON_BOOTSTRAP_TEMP_SCRIPT"' EXIT
+        fi
+    fi
+
+    # ============================================================================
+    # MAIN EXECUTION
+    # ============================================================================
+
+    # set configuration variables
     local aeon_repo="https://github.com/conceptixx/AEON.git"
     local aeon_raw="https://raw.githubusercontent.com/conceptixx/AEON/main"
     local install_dir="/opt/aeon"
+    local version="0.1.0.dev"
+    local install_os="unknown"
+    local orchestrator_path="$1"
+    local manifest_file="bootstrap.manifest.json"
 
-    local lib_modules=(
-        "dependencies.sh"
-        "common.sh"
-        "progress.sh"
-        "preflight.sh"
-        "discovery.sh"
-        "hardware.sh"
-        "validation.sh"
-        "parallel.sh"
-        "user.sh"
-        "reboot.sh"
-        "swarm.sh"
-        "report.sh"
-        "scoring.py"
-    )
+    # set allowed flags
+    local CLI_ENABLE=0
+    local WEB_ENABLE=0
+    local NONINTERACTIVE=0
 
-    local remote_scripts=(
-        "dependencies.remote.sh"
-        "hardware.remote.sh"
-    )
+    # 
+    local APT_UPDATED=0
+    local BREW_UPDATED=0
+    local APT_PKG=()
+    local BREW_PKG=()
 
-    # Colors
-    local red='\033[0;31m'
-    local green='\033[0;32m'
-    local yellow='\033[1;33m'
-    local bold='\033[1m'
-    local nocolor='\033[0m'
+    # set generic padding for printf
+    local padding=10
 
-    local output_mode=0
-    local skip_prompts=false
-    local force_remove=false
-    local keep_files=false
-    
-    local progress=false
-
-    # ============================================================================
-    # BANNER
-    # ============================================================================
-
-    #
     # print banner
     # Displays the AEON ASCII art logo
-    #
     print_banner() {
-        clear
+        [[ -t 1 ]] && clear
         # define AEON logo
         local logo_lines=(
             "   █████╗  ███████╗  ██████╗  ███╗   ██╗ "
@@ -107,312 +158,238 @@ bootstrap_main() {
         # print AEON logo centered
         for line in "${logo_lines[@]}"; do
             local text_length=${#line}
-            local padding=$(( (80 - text_length) / 2 ))
-            printf "%${padding}s%s\n" "" "$line"
+            local padding_logo=$(( (80 - text_length) / 2 ))
+            printf "%${padding_logo}s%s\n" "" "$line"
         done
         # print linebreak
-        echo ""
+        printf "%${padding}s%s\n" "" ""
     }
 
-    # ============================================================================
-    # PRE-CHECKS
-    # ============================================================================
-
-    #
-    # check_root
-    # Verifies the script is running with root privileges
-    #
-    check_root() {
-        __echo 0 "Checking sudo ..."
-        if [[ $EUID -ne 0 ]]; then
-            __echo 2 "${red}${bold}This script must be run as root${nocolor}"
-            __echo 0 ""
-            __echo 1 "${yellow}Please run:${nocolor}"
-            __echo 1 "${yellow}  curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash${nocolor}"
-            __echo 0 ""
-            exit 1
-        fi
-        __echo 0 " - Check for root user ${green}${bold}successful${nocolor}"
-        __show_silent_progress 5
-    }
-
-    #
-    # check_previous_install
-    # Checks if AEON is already installed and handles reinstallation
-    #
-    check_previous_install() {
-        # check for previous installation
-        __echo 0 "Checking prerequisites ..."
-        # Check if already installed
-        if [[ -d "$install_dir" ]]; then
-            # previous installation detected
-            __echo 1 "   ${yellow}AEON is already installed at $install_dir${nocolor}"
-            if ! $skip_prompts; then
-                # Check if we can access terminal
-                if [[ -t 1 ]] && [[ -c /dev/tty ]]; then
-                    printf "   Reinstall? [y/N]: " > /dev/tty
-                    read -r response < /dev/tty
-                else
-                    # Non-interactive - default to no
-                    printf "   Reinstall? [y/N]: n (non-interactive mode)" >&2
-                    response="n"
-                fi
-                # Normalize response
-                response=$(echo "$response" | tr '[:upper:]' '[:lower:]' | xargs)
-                # cancel if not confirmed
-                if [[ "$response" != "y" ]] && [[ "$response" != "yes" ]]; then
-                    __echo 2 " - Installation ${red}${bold}cancelled${nocolor}"
-                    __echo 0 ""
-                    __echo 1 "   ${yellow}To force reinstall run:${nocolor}"
-                    __echo 1 "   ${yellow}curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash ${red} -s -- --force${yellow}${nocolor}"
-                    __echo 0 ""
-                    exit 0
-                fi
-            fi
-            if ! $force_remove; then
-                # remove only installation files
-                __echo 0 "   Removing existing installation (keep files)"
-                rm -f -- "${lib_modules[@]}/#/$install_dir/lib/"
-                rm -f -- "${remote_scripts[@]}/#/$install_dir/remote/"
-                keep_files=true
-            else
-                # remove previuos installation
-                __echo 0 "   Removing existing installation (remove files)"
-                rm -rf "$install_dir"
-            fi
-        fi
-        __echo 0  " - Check for prerequisites ${green}${bold}successful${nocolor}"
-        __show_silent_progress 15
-    }
-
-    # ============================================================================
-    # INSTALLATION
-    # ============================================================================
-
-    #
-    # install_via_git
-    # Installs AEON by cloning the GitHub repository
-    #
-    install_via_git() {
-        # try to clone git repo
-        __echo 0 "   Cloning AEON repository..."
-        # if git command not available download and install git
-        if ! command -v git &>/dev/null; then
-            __echo 1 "   ${yellow}Git not found, installing git${nocolor}"
-            apt-get update -qq
-            apt-get install -y -qq git
-        fi
-        # clone git repo
-        git clone --quiet "$aeon_repo" "$install_dir"
-        __echo 0 " - Repository cloned ${green}${bold}successful${nocolor}"
-        __show_silent_progress 45
-    }
-
-    #
-    # install_via_download
-    # Installs AEON by downloading individual files directly
-    #
-    install_via_download() {
-        __echo 0 "   Downloading AEON components..."
-        # Ensure curl/wget available
-        if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
-            apt-get update -qq
-            apt-get install -y -qq curl wget
-        fi
-        # Create directory structure
-        mkdir -p "$install_dir"/{lib,remote,config,data,secrets,logs,reports,docs,examples}
-        # Download main script
-        curl -fsSL "$aeon_raw/aeon_go.sh" -o "$install_dir/aeon_go.sh"
-        __show_silent_progress 3
-        # Download lib modules
-        for module in "${lib_modules[@]}"; do
-            echo 0 "loading ... $aeon_raw/lib/$module -> $install_dir/lib/$module"
-            curl -fsSL "$aeon_raw/lib/$module" -o "$install_dir/lib/$module"
-            chmod +x "$install_dir/lib/$module"
-            __show_silent_progress 3
-        done
-        # Download remote scripts
-        for script in "${remote_scripts[@]}"; do
-            curl -fsSL "$aeon_raw/remote/$script" -o "$install_dir/remote/$script"
-            chmod +x "$install_dir/remote/$script"
-            __show_silent_progress 3
-        done
-        __echo 0 " - Components downloaded ${green}${bold}successful${nocolor}"
-    }
-
-    #
-    # perform_installation
-    # Main installation orchestrator - tries git first, falls back to download
-    #
-    perform_installation() {
-        __echo 0 "Installing AEON... $keep_files"
-        if ! $keep_files; then
-            # Try git first, fallback to direct download
-            if command -v git &>/dev/null; then
-                install_via_git
-            else
-                __echo 1 "   ${yellow}Git not available, using direct download${nocolor}"
-                install_via_download
-            fi
-        else
-            __echo 1 "   keeping files, ${yellow}using direct download${nocolor}"
-            install_via_download
-        fi
-        # Set permissions
-        chmod 755 "$install_dir"
-        __echo 0 "   AEON setup prepared ($install_dir/aeon_go.sh)"
-        __show_silent_progress 5
-    }
-
-    # ============================================================================
-    # POST-INSTALLATION
-    # ============================================================================
-
-    #
-    # run_aeon_go_installer
-    # Displays completion message and runs aeon_go.sh
-    #
-    run_aeon_go_installer() {
-        __echo 2 ""
-        __echo 0 "   Starting AEON installation..."
-        __echo 2 ""
-        # Auto-launch aeon-go.sh
-        cd "$install_dir"
-        exec bash aeon_go.sh
-    }
-
-    # ============================================================================
-    # MAIN EXECUTION
-    # ============================================================================
-
-    #
-    # main
-    # Main execution function - orchestrates the bootstrap process
-    #
-    main() {
-        print_banner
-        check_root
-        check_previous_install
-        perform_installation
-        run_aeon_go_installer
-    }
-    
-    #
-    # __show_version
-    # shows the version of the bootstrap.sh file
-    #
-    __show_version() {
-        print_banner
-        echo " version: $version"
-        echo ""
-    }
-
-    #
-    # __show_help
+    # help
     # shows help screen
-    #
-    __show_help() {
+    usage() {
         print_banner
-        echo -e "${yellow}${bold}Usage:${nocolor}"
-        echo -e "   curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash ${yellow}-s -- [OPTIONS]${nocolor}"
-        echo ""
-        echo -e "${yellow}${bold}Options:${nocolor}"
-        echo -e "   -h, --help              ${yellow}Show this help${nocolor}"
-        echo -e "   -V, --version           ${yellow}Show version${nocolor}"
-        echo -e "   -q, --quiet             ${yellow}Reduce output${nocolor}"
-        echo -e "   -qq, --silent           ${yellow}Cancel output${nocolor}"
-        echo -e "   -y, --yes               ${yellow}Assume ${green}yes${yellow} for prompts${nocolor}"
-        echo -e "   -f, --force             ${yellow}Force reinstall${nocolor}"
-        echo ""
+        printf "%${padding}s%s\n" "" ""
+        printf "%${padding}s%s\n" "" "Usage:"
+        printf "%${padding}s%s\n" "" "   curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash -s -- [OPTIONS]"
+        printf "%${padding}s%s\n" "" ""
+        printf "%${padding}s%s\n" "" "Options:"
+        printf "%${padding}s%s\n" "" "-c | -C | --enable-cli | --cli-enable     install cli TUI"
+        printf "%${padding}s%s\n" "" "-w | -W | --enable-web | --web-enable     install web GUI"
+        printf "%${padding}s%s\n" "" "-n | -N | --noninteractive                runs install non interactive"
+        printf "%${padding}s%s\n" "" "                                          no prompts - use defaults"
+        printf "%${padding}s%s\n" "" ""
+        exit 0
     }
 
-    #
-    # __show_silent_progress
-    # shows a quick progress for the installation
-    #
-    __show_silent_progress() {
-        local indicator="$1"
-        local prefix="Progress: "
-        if (( output_mode == 2 )); then
-            # Prefix on first run
-            if ! $progress; then
-                printf 'progress: '
-                progress=true
-            fi
-            printf '%*s' "$indicator" '' | tr ' ' "."
-        fi        
+    # sudo_run
+    # Sudo helper: use sudo if not root; fail if neither root nor sudo available.
+    run_sudo() {
+        if [ "$(id -u)" -eq 0 ]; then "$@"; return 0; fi
+        if have sudo; then sudo "$@"; return 0; fi
+        on_error "ERROR" "This script must be run as root"
+        on_error "ERROR" "Please run:"
+        on_error "ERROR" "  curl -fsSL https://raw.githubusercontent.com/conceptixx/AEON/main/bootstrap.sh | sudo bash"
+        exit "$EXIT_SUDO"
     }
-    #
-    # __echo
-    # modified echo to track quiet and silent mode
-    #
-    __echo() {
-        local min_mode="${1}"
-        shift
-        local output="$*"
-        if (( min_mode >= output_mode )); then
-            printf '%b\n' "$output"
+
+    # need_cmd
+    # command helper: returns true if command is available
+    have() {
+        command -v "$1" >/dev/null 2>&1;
+    }
+
+    # checks for operating systems (macos, linux)
+    is_mac_os() {
+        [ "$(uname -s 2>/dev/null)" = "Darwin" ]
+    }
+    is_linux() {
+        [ "$(uname -s 2>/dev/null)" = "Linux" ] 
+    }
+
+    # system requirement installer
+    apt_update_once() {
+        if ! have apt-get; then return 1; fi
+        if [ "${APT_UPDATED:-0}" = "1" ]; then return 0; fi
+        run_sudo apt-get update -y || return 1
+        APT_UPDATED="1"
+        return 0
+    }
+    brew_update_once() {
+        if ! have brew; then return 1; fi
+        if [ "${BREW_UPDATED:-0}" = "1" ]; then return 0; fi
+        brew update >/dev/null 2>&1 || return 1
+        BREW_UPDATED="1"
+        return 0
+    }
+    
+    get_curl() {
+        if ! have curl; then
+            if have apt-get; then APT_PKG+=("curl"); return 0;
+            elif have brew; then BREW_PKG+=("curl");return 0; fi
+        fi
+        return 0
+    }
+    get_wget() {
+        if ! have wget; then
+            if have apt-get; then APT_PKG+=("wget"); return 0;
+            elif have brew; then BREW_PKG+=("wget");return 0; fi
+        fi
+        return 0
+    }
+    have_ca_certs() {
+        if [ -r /etc/ssl/certs/ca-certificates.crt ]; then return 0; fi
+        if [ -r /etc/ssl/cert.pem ] || [ -r /usr/local/etc/openssl@3/cert.pem ] || [ -r /opt/homebrew/etc/openssl@3/cert.pem ]; then return 0; fi
+        return 1
+    }
+    check_ca_certs() {
+        if have apt-get; then have update-ca-certificates && update-ca-certificates >/dev/null 2>&1 || return 0 ; fi
+        if have brew; then have_ca_certs || brew install openssl@3 >/dev/null 2>&1 || return 0 ; fi
+    }
+    get_ca_certs() {
+        have_ca_certs && return 0
+        if have apt-get; then APT_PKG+=("ca-certificates"); return 0;
+        elif have brew; then BREW_PKG+=("ca-certificates"); return 0; fi
+        return 1
+    }    
+    get_brew() {
+        if ! have brew; then
+            if have curl; then
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || return 1
+                return 0
+            elif have wget; then
+                /bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || return 1
+                return 0
+            fi
+            on_error "ERROR" "no installer available for homebrew (need curl or wget)"
+            exit "$EXIT_DEPENDENCY"
+        fi
+        return 0
+    }
+    get_py_is_py3() {
+        if have python; then
+            if ! python --version 2>&1 | grep -q '^Python 3'; then
+                if have apt-get; then APT_PKG+=("python-is-python3"); fi
+            fi
+        fi
+        return 0
+    }
+    get_python() {
+        if ! have python; then
+        if have apt-get; then APT_PKG+=("python3"); return 0;
+        elif have brew; then BREW_PKG+=("python"); return 0; fi
+        fi
+        return 0
+    }
+    get_pip3() {
+        if ! have pip3; then
+            if have apt-get; then APT_PKG+=("python3-pip"); return 0; fi
+        fi
+        return 0
+    }
+    get_pip3_alternate() {
+        if ! have pip3; then
+            if have python3 && ( have curl || have wget); then
+                if have curl; then run_sudo curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py || return 1 ; fi
+                if have wget; then run_sudo wget -qO /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py || return 1 ; fi
+                python3 /tmp/get-pip.py --user || return 1
+                return 0
+            fi
+        fi
+    }
+    get_venv() {
+        if have python3; then
+            if ! python3 -c 'import venv' >/dev/null 2>&1 ; then 
+                if have apt-get; then APT_PKG+=("python3-venv") ; fi
+            fi
+        fi
+        return 0
+    }
+    get_verify() {
+        local error=0
+        if ! have curl ; then on_error "ERROR" "no installer available for curl (need apt-get or brew)" ; error=1 ; fi
+        if ! have wget; then on_error "ERROR" "no installer available for wget (need apt-get or brew)" ; error=1 ; fi
+        if ! have_ca_certs; then on_error "ERROR" "installation failed for ca-certificates" ; error=1 ; fi
+        if ! have python3; then on_error "ERROR" "no installer available for python (need apt-get or brew)" ; error=1 ; fi
+        if is_macos; then
+            if ! have brew; then on_error "ERROR" "no installer available for homebrew (need curl or wget)" ; error=1 ; fi
+        elif is_linux ; then
+            if ! have pip3; then on_error "ERROR" "no installer available for pip3 (need apt-get/brew or python3 + curl/wget)" ; error=1 ; fi
+            if ! python --version 2>&1 | grep -q '^Python 3'; then on_error "ERROR" "no installer available for python-is-python3" ; error=1 ; fi
+            if have python3; then
+                if ! python3 -c 'import venv' >/dev/null 2>&1; then
+                    on_error "ERROR" "no installer available for python3 venv (need apt-get or brew)"
+                    error=1
+                fi
+            fi
+        fi
+        if (( error == 1 )); then
+            exit "$EXIT_DEPENDENCY"
+        fi
+    }
+    get_install() {
+        if is_linux ; then apt_update_once ; fi
+        get_curl
+        get_wget
+        if is_macos; then get_brew ; brew_update_once ;  fi
+        get_ca_certs
+        get_python
+        get_pip3
+        get_venv
+        if is_linux ; then
+            run_sudo apt-get -qq install -y --no-install-recommends "${APT_PKG[@]}"
+        elif is_macos ; then
+            brew install "${BREW_PKG[@]}" >/dev/null 2>&1
+        fi   
+        get_pip3_alternate
+    }
+
+    # checks for: windows | macos | raspios | linux | unknown
+    prepare_os() {
+        if ! is_macos && ! is_linux; then
+            on_error "ERROR" "unknown operating system detected - check website for details:"
+            on_error "ERROR" "${aeon_raw}/requirements.md"
+            exit "$EXIT_ENVIR"
         fi
     }
 
-    # dispatcher
-    while (($#)); do
-        arg="$1"
+    # run python orchestrator using bootstrap.manifest.json
+    run_orchestrator() {
+        python "$orchestrator_path" "$@"
+    }
 
-        # Only normalize long options (case-insensitive for --something)
-        if [[ "$arg" == --* ]]; then
-            arg="${arg,,}"   # lowercase (bash)
-            fi
-        # check for options
-        case "$arg" in
-            # show help screen
-            -h|--help)
-            __show_help
-            exit 0
-            ;;
-            # show version
-            -V|--version)
-            __show_version
-            exit 0
-            ;;
-            # turn on quiet mode
-            -q|--quiet)
-            output_mode=$((output_mode + 1))
-            shift
-            continue
-            ;;
-            # turn on silent mode
-            -qq|--silent)
-            output_mode=$((output_mode + 2))
-            shift
-            continue
-            ;;
-            # skip prompts
-            -y|--yes)
-            skip_prompts=true
-            shift
-            continue
-            ;;
-            # force remove
-            -f|--force)
-            force_remove=true
-            shift
-            continue
-            ;;
+    # Main execution function - orchestrates the bootstrap process
+    main() {
 
-            *)
-            # positional arg
-            __show_help
-            exit 0
-            ;;
-        esac
-    done
-    
-    main
+        # Capability flags only; no -h/--help on purpose
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -c|-C|--cli-enable|--enable-cli) CLI_ENABLE=1 ;;
+                -w|-W|--web-enable|--enable-web) WEB_ENABLE=1 ;;
+                -n|-N|--noninteractive) NONINTERACTIVE=1 ;;
+                *) usage; exit 0 ;;
+            esac
+            shift
+        done
+
+        print_banner
+        get_curl
+        get_wget
+        get_brew
+        get_ca_certs
+        get_python
+        get_venv
+        get_pip3
+        get_pip3_alternate
+        get_py_is_py3
+        get_install
+        get_verify
+    }
+    main "$@"
 }
 #
 # automatic execution
 # entrypoint main
 #
 bootstrap_main "$@"
-
+# ***END*OF*FILE***
