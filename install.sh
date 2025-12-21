@@ -3,7 +3,11 @@
 set -e
 
 AEON_RAW_BASE_URL="https://raw.githubusercontent.com/conceptixx/AEON/main"
-AEON_TARGET_DIR="/opt/aeon/tmp"
+#-AEON_TARGET_DIR=""
+#+AEON_WORKING_DIR="/opt/aeon"
+#+AEON_TARGET_DIR=""
+AEON_WORKING_DIR="/opt/aeon"
+AEON_TARGET_DIR=""
 AEON_BASH_FILE="install.bash.sh"
 AEON_PWSH_FILE="install.pwrshl.ps1"
 
@@ -54,6 +58,8 @@ case "$OSTYPE" in
         ;;
     darwin*)
         OS_TYPE="macos"
+        #+AEON_WORKING_DIR="/usr/local/aeon"
+        AEON_WORKING_DIR="/usr/local/aeon"
         ;;
     msys*|mingw*|cygwin*)
         OS_TYPE="windows"
@@ -62,6 +68,8 @@ case "$OSTYPE" in
         OS_TYPE="linux"
         ;;
 esac
+#+AEON_TARGET_DIR="${AEON_WORKING_DIR}/tmp"
+AEON_TARGET_DIR="${AEON_WORKING_DIR}/tmp"
 
 echo "[INFO] Detected OS: $OS_TYPE"
 

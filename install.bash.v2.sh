@@ -15,20 +15,11 @@ set -euo pipefail
 # ----------------------------- Config (Header) ------------------------------
 
 AEON_BASE_URL="https://raw.githubusercontent.com/conceptixx/AEON/main"
-AEON_ROOT_LINUX="/opt/aeon"
-AEON_ROOT_MACOS="/usr/local/aeon"  # macOS must not use /opt/aeon
-
-# Select AEON_ROOT early (before silent logging init) without emitting output.
-if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ]; then
-  AEON_ROOT="$AEON_ROOT_MACOS"
-else
-  AEON_ROOT="$AEON_ROOT_LINUX"
-fi
+AEON_ROOT="/opt/aeon"
 AEON_USER="aeon-system"
 
 AEON_LOGDIR="${AEON_ROOT}/logfiles"   # preferred
 AEON_LOGDIR_FALLBACK="/tmp/aeon-logfiles"  # used if AEON_LOGDIR cannot be created/opened early
-
 
 AEON_ORCH_MODE="auto"                 # auto|native|docker
 AEON_ORCH_DOCKER_IMAGE="python:3.11-slim"
