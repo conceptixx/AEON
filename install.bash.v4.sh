@@ -2,7 +2,6 @@
 # AEON Installation Script
 # Supports: Linux (Ubuntu/Debian/Raspbian), macOS, WSL
 # Bash 3.2+ compatible
-# VERSION: 3.1.1-patched (QA fixes applied)
 
 set -euo pipefail
 
@@ -10,7 +9,7 @@ set -euo pipefail
 # CONFIGURATION
 # =============================================================================
 
-AEON_VERSION="3.1.1-patched"
+AEON_VERSION="3.1.0"
 GITHUB_RAW_BASE="https://raw.githubusercontent.com/conceptixx/AEON/main"
 
 # Orchestrator configuration
@@ -37,39 +36,21 @@ BREW_USER=""
 BREW_PATH=""
 LOG_FILE=""
 SILENT_MODE=0
-APT_UPDATED=0
 
 # =============================================================================
-# PRE-SCAN NONINTERACTIVE (MUST BE FIRST - ZERO OUTPUT)
-# =============================================================================
-# PATCH #1: Redirect BEFORE any code that might produce output
-
-for arg in "$@"; do
-    arg_lower=$(printf '%s\n' "$arg" | tr '[:upper:]' '[:lower:]')
-    case "$arg_lower" in
-        -n|--noninteractive)
-            LOG_FILE="/tmp/aeon-install-$$.log"
-            exec 1>"$LOG_FILE" 2>&1
-            SILENT_MODE=1
-            FLAG_NONINTERACTIVE=1  # Set here too
-            break
-            ;;
-    esac
-done
-
-# =============================================================================
-# EARLY INIT SILENT MODE (LEGACY - NOW HANDLED BY PRE-SCAN)
+# EARLY INIT SILENT MODE
 # =============================================================================
 
 early_init_silent() {
-    # Already handled by pre-scan, but keep function for compatibility
-    # If called and not silent yet, redirect now
-    if [ "$SILENT_MODE" -eq 0 ]; then
-        local tmplog="/tmp/aeon-install-$$.log"
-        exec 1>"$tmplog" 2>&1
-        LOG_FILE="$tmplog"
-        SILENT_MODE=1
-    fi
+    local tmplog
+    tmplog="/tmp/aeon-install-$$.log"
+    
+    # Redirect all output to log
+    exec 1>"$tmplog"
+    exec 2>&1
+    
+    LOG_FILE="$tmplog"
+    SILENT_MODE=1
 }
 
 # =============================================================================
@@ -77,27 +58,21 @@ early_init_silent() {
 # =============================================================================
 
 parse_args() {
-    local count=0
-    local arg_lower
-    
     while [ $# -gt 0 ]; do
-        # Convert to lowercase using tr
-        arg_lower=$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]')
-        
-        case "$arg_lower" in
-            -c|--cli-enable|--enable-cli)
+        case "$1" in
+            -c|-C|--cli-enable|--enable-cli|--CLI-ENABLE|--ENABLE-CLI)
                 FLAG_CLI_ENABLE=1
-                count=$((count + 1))
                 shift
                 ;;
-            -w|--web-enable|--enable-web)
+            -w|-W|--web-enable|--enable-web|--WEB-ENABLE|--ENABLE-WEB)
                 FLAG_WEB_ENABLE=1
-                count=$((count + 1))
                 shift
                 ;;
-            -n|--noninteractive)
-                # Already handled by pre-scan, just increment counter
-                count=$((count + 1))
+            -n|-N|--noninteractive|--NONINTERACTIVE)
+                FLAG_NONINTERACTIVE=1
+                if [ "$SILENT_MODE" -eq 0 ]; then
+                    early_init_silent
+                fi
                 shift
                 ;;
             *)
@@ -111,12 +86,6 @@ parse_args() {
                 ;;
         esac
     done
-    
-    # Check max 3 flags
-    if [ $count -gt 3 ]; then
-        printf "Error: Maximum 3 flags allowed (c/w/n)\n" >&2
-        exit 2
-    fi
 }
 
 # =============================================================================
@@ -249,117 +218,158 @@ install_always_tools() {
             
             if [ -n "$missing_pkgs" ]; then
                 log "Installing missing packages:$missing_pkgs"
-                if [ "$APT_UPDATED" -eq 0 ]; then
-                    apt-get update -qq
-                    APT_UPDATED=1
-                fi
+                apt-get update -qq
                 apt-get install -y -qq $missing_pkgs
             else
-                log "All required tools already installed"
+                log "All always-tools already installed"
             fi
             ;;
+            
         macos)
-            local missing_pkgs=""
+            # curl usually present
+            if ! command -v curl >/dev/null 2>&1; then
+                log_error "curl not found on macOS (unexpected)"
+                exit 1
+            fi
             
-            for pkg in curl wget; do
-                if ! sudo -u "$BREW_USER" -H "$BREW_PATH" list "$pkg" >/dev/null 2>&1; then
-                    missing_pkgs="$missing_pkgs $pkg"
-                fi
-            done
-            
-            if [ -n "$missing_pkgs" ]; then
-                log "Installing missing packages:$missing_pkgs"
-                for pkg in $missing_pkgs; do
-                    sudo -u "$BREW_USER" -H "$BREW_PATH" install "$pkg"
-                done
+            # wget via brew if needed
+            if ! command -v wget >/dev/null 2>&1; then
+                log "Installing wget via Homebrew..."
+                sudo -u "$BREW_USER" -H "$BREW_PATH" install wget
             else
-                log "All required tools already installed"
+                log "wget already installed"
+            fi
+            
+            # ca-certificates only if brew available and package missing
+            if sudo -u "$BREW_USER" -H "$BREW_PATH" list ca-certificates >/dev/null 2>&1; then
+                log "ca-certificates already installed"
+            else
+                log "Installing ca-certificates via Homebrew..."
+                sudo -u "$BREW_USER" -H "$BREW_PATH" install ca-certificates || log "ca-certificates install skipped/failed (may be optional)"
             fi
             ;;
     esac
 }
 
 install_python() {
-    log "Checking Python 3..."
-    
-    if command -v python3 >/dev/null 2>&1; then
-        local py_version
-        py_version="$(python3 --version 2>&1 | awk '{print $2}')"
-        log "Python 3 already installed: $py_version"
-        return
-    fi
+    log "Checking Python installation..."
     
     case "$OS_TYPE" in
         linux|wsl)
-            log "Installing Python 3..."
-            if [ "$APT_UPDATED" -eq 0 ]; then
-                apt-get update -qq
-                APT_UPDATED=1
+            local missing_pkgs=""
+            
+            for pkg in python3 python3-pip python3-venv python-is-python3; do
+                if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+                    missing_pkgs="$missing_pkgs $pkg"
+                fi
+            done
+            
+            if [ -n "$missing_pkgs" ]; then
+                log "Installing missing Python packages:$missing_pkgs"
+                if [ -z "$(apt-cache policy 2>/dev/null)" ]; then
+                    apt-get update -qq
+                fi
+                apt-get install -y -qq $missing_pkgs
+            else
+                log "Python already installed"
             fi
-            apt-get install -y -qq python3 python3-pip python3-venv
             ;;
+            
         macos)
-            log "Installing Python 3..."
-            sudo -u "$BREW_USER" -H "$BREW_PATH" install python3
+            # Check if python3 works and venv module available
+            if command -v python3 >/dev/null 2>&1 && python3 -m venv --help >/dev/null 2>&1; then
+                log "Python3 with venv already installed"
+            else
+                log "Installing Python via Homebrew..."
+                sudo -u "$BREW_USER" -H "$BREW_PATH" install python
+            fi
             ;;
     esac
 }
 
 install_docker() {
-    log "Checking Docker..."
-    
-    if command -v docker >/dev/null 2>&1; then
-        local docker_version
-        docker_version="$(docker --version 2>&1)"
-        log "Docker already installed: $docker_version"
+    if [ "$OS_TYPE" = "macos" ]; then
+        log "Docker installation on macOS requires Docker Desktop (manual install)"
         return
     fi
     
-    case "$OS_TYPE" in
-        linux)
-            log "Installing Docker..."
-            if [ "$APT_UPDATED" -eq 0 ]; then
-                apt-get update -qq
-                APT_UPDATED=1
-            fi
-            
-            # Install prerequisites
-            apt-get install -y -qq apt-transport-https ca-certificates curl gnupg lsb-release
-            
-            # Add Docker GPG key and repository
-            local distro
-            distro="$(lsb_release -is | tr '[:upper:]' '[:lower:]')"
-            
-            curl -fsSL "https://download.docker.com/linux/$distro/gpg" | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-            
-            printf "deb [arch=%s signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/%s %s stable\n" \
-                "$(dpkg --print-architecture)" "$distro" "$(lsb_release -cs)" > /etc/apt/sources.list.d/docker.list
-            
-            apt-get update -qq
-            apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
-            
-            systemctl enable docker
-            systemctl start docker
-            ;;
-        wsl)
-            log "WSL detected - Docker Desktop recommended"
-            log "Skipping Docker installation (use Docker Desktop for Windows)"
-            ;;
-        macos)
-            log "macOS detected - Docker Desktop recommended"
-            log "Installing Docker CLI only (use Docker Desktop for macOS)"
-            sudo -u "$BREW_USER" -H "$BREW_PATH" install docker
-            ;;
-    esac
+    log "Checking Docker installation..."
+    
+    # Check if docker exists
+    if command -v docker >/dev/null 2>&1; then
+        # Check if daemon is running
+        if systemctl is-active docker >/dev/null 2>&1 || service docker status >/dev/null 2>&1; then
+            log "Docker already installed and running"
+            return
+        fi
+        
+        # Docker exists but not running - try to start
+        log "Docker installed but not running, starting..."
+        systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
+        sleep 2
+        
+        if systemctl is-active docker >/dev/null 2>&1 || service docker status >/dev/null 2>&1; then
+            log "Docker started successfully"
+            return
+        fi
+    fi
+    
+    # Need to install Docker
+    log "Installing Docker..."
+    
+    # Detect distro
+    local distro_id
+    if [ -f /etc/os-release ]; then
+        distro_id="$(grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+        # Raspbian -> Debian
+        if [ "$distro_id" = "raspbian" ]; then
+            distro_id="debian"
+        fi
+    else
+        log_error "Cannot determine Linux distribution"
+        exit 1
+    fi
+    
+    if [ "$distro_id" != "ubuntu" ] && [ "$distro_id" != "debian" ]; then
+        log_error "Docker auto-install only supports Ubuntu/Debian/Raspbian, detected: $distro_id"
+        exit 1
+    fi
+    
+    # Install prerequisites
+    apt-get update -qq
+    apt-get install -y -qq ca-certificates curl gnupg lsb-release
+    
+    # Add Docker GPG key
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL "https://download.docker.com/linux/$distro_id/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    
+    # Add Docker repository
+    printf "deb [arch=%s signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/%s %s stable\n" \
+        "$(dpkg --print-architecture)" \
+        "$distro_id" \
+        "$(lsb_release -cs)" > /etc/apt/sources.list.d/docker.list
+    
+    # Install Docker packages
+    apt-get update -qq
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    
+    # Enable and start
+    systemctl enable docker
+    systemctl start docker
+    
+    log "Docker installed and started"
 }
 
 # =============================================================================
-# SYSTEM USER
+# USER & PERMISSIONS
 # =============================================================================
 
 create_system_user() {
+    log "Checking system user: $AEON_USER"
+    
     if id "$AEON_USER" >/dev/null 2>&1; then
-        log "System user '$AEON_USER' already exists"
+        log "User $AEON_USER already exists"
         return
     fi
     
@@ -367,44 +377,39 @@ create_system_user() {
     
     case "$OS_TYPE" in
         linux|wsl)
-            useradd -r -s /bin/bash -d "$AEON_ROOT" -m -c "AEON System User" "$AEON_USER"
+            useradd -r -s /usr/sbin/nologin -d "$AEON_ROOT" -c "AEON System User" "$AEON_USER" || \
+                useradd -r -s /bin/false -d "$AEON_ROOT" -c "AEON System User" "$AEON_USER"
             ;;
         macos)
-            # macOS uses dscl
-            local next_uid
-            next_uid=$(/usr/bin/dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1)
-            next_uid=$((next_uid + 1))
+            # macOS system user creation
+            local maxid
+            maxid=$(dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1)
+            local newid=$((maxid + 1))
             
-            /usr/bin/dscl . -create "/Users/$AEON_USER"
-            /usr/bin/dscl . -create "/Users/$AEON_USER" UserShell /bin/bash
-            /usr/bin/dscl . -create "/Users/$AEON_USER" RealName "AEON System User"
-            /usr/bin/dscl . -create "/Users/$AEON_USER" UniqueID "$next_uid"
-            /usr/bin/dscl . -create "/Users/$AEON_USER" PrimaryGroupID 20
-            /usr/bin/dscl . -create "/Users/$AEON_USER" NFSHomeDirectory "$AEON_ROOT"
+            dscl . -create "/Users/$AEON_USER"
+            dscl . -create "/Users/$AEON_USER" UserShell /usr/bin/false
+            dscl . -create "/Users/$AEON_USER" RealName "AEON System User"
+            dscl . -create "/Users/$AEON_USER" UniqueID "$newid"
+            dscl . -create "/Users/$AEON_USER" PrimaryGroupID 20
+            dscl . -create "/Users/$AEON_USER" NFSHomeDirectory "$AEON_ROOT"
             ;;
     esac
-    
-    log "System user created successfully"
 }
-
-# =============================================================================
-# DIRECTORY SETUP
-# =============================================================================
 
 setup_directories() {
-    log "Setting up directories..."
+    log "Setting up directory structure..."
     
-    mkdir -p "$AEON_ROOT"/{logs,library/orchestrator,manifest/config}
+    mkdir -p "$AEON_ROOT"
+    mkdir -p "$AEON_ROOT/library/orchestrator"
+    mkdir -p "$AEON_ROOT/manifest/config"
+    mkdir -p "$AEON_ROOT/logs"
+    mkdir -p "$AEON_ROOT/data"
     
+    # Set ownership
     chown -R "$AEON_USER:$(id -gn "$AEON_USER")" "$AEON_ROOT"
-    chmod 755 "$AEON_ROOT"
     
-    log "Directories created and permissions set"
+    log "Directory structure created"
 }
-
-# =============================================================================
-# SUDOERS
-# =============================================================================
 
 setup_sudoers() {
     log "Configuring sudoers for $AEON_USER..."
@@ -518,9 +523,6 @@ run_orchestrator() {
     if [ "$FLAG_WEB_ENABLE" -eq 1 ]; then
         transfer_flags="$transfer_flags --web-enable"
     fi
-    if [ "$FLAG_NONINTERACTIVE" -eq 1 ]; then
-        transfer_flags="$transfer_flags --noninteractive"
-    fi
     
     # Determine mode
     local mode="$AEON_ORCH_MODE"
@@ -607,14 +609,11 @@ run_orchestrator_docker() {
 
 finalize_installation() {
     if [ "$SILENT_MODE" -eq 1 ]; then
-        # Move log to final location if possible
-        if [ -n "$AEON_ROOT" ] && mkdir -p "$AEON_ROOT/logs" 2>/dev/null; then
-            local final_log="$AEON_ROOT/logs/install-$(date +%Y%m%d-%H%M%S).log"
-            if [ -f "$LOG_FILE" ]; then
-                cp "$LOG_FILE" "$final_log" 2>/dev/null || true
-                chown "$AEON_USER:$(id -gn "$AEON_USER")" "$final_log" 2>/dev/null || true
-            fi
-        fi
+        # Move log to final location
+        local final_log="$AEON_ROOT/logs/install-$(date +%Y%m%d-%H%M%S).log"
+        mkdir -p "$AEON_ROOT/logs"
+        cp "$LOG_FILE" "$final_log"
+        chown "$AEON_USER:$(id -gn "$AEON_USER")" "$final_log"
         # Don't print anything in silent mode
     else
         log ""
@@ -637,22 +636,17 @@ finalize_installation() {
 # =============================================================================
 
 main() {
-    # PATCH #2: Parse args BEFORE root check (ensures silent mode active)
+    # Parse args first (may enable silent mode)
     parse_args "$@"
     
-    # NOW check root (output already redirected if -n used)
+    # Root check
     if [ "$(id -u)" -ne 0 ]; then
         log_error "This script must be run as root"
         exit 1
     fi
     
-    # PATCH #3: Only show banner in interactive mode
-    if [ "$SILENT_MODE" -eq 0 ]; then
-        log "AEON Installer v$AEON_VERSION"
-        log "Starting installation..."
-    else
-        log "Installation started (silent mode)"
-    fi
+    log "AEON Installer v$AEON_VERSION"
+    log "Starting installation..."
     
     # Detection
     detect_os
