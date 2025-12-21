@@ -1,73 +1,152 @@
 #!/usr/bin/env python3
+"""
+AEON Orchestrator (Simulation Example)
+
+- Prints a simple status summary to stdout (screen-first).
+- Accepts: -c/-w/-n and long variants (case-insensitive for long flags).
+- Accepts: --file:/manifest/manifest.install.json
+           --config:/manifest/config/manifest.config.cursed.json
+- Reads JSON files relative to AEON_ROOT (env) with OS fallbacks.
+"""
+
 import json
 import os
 import sys
+from pathlib import Path
+from typing import Optional, Tuple
 
-def _read_json(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
 
-def _status(name: str, data: dict) -> str:
-    val = data.get(name, None)
-    if val is True:
-        return "success"
-    return "failed"
+def default_root() -> str:
+    # Use AEON_ROOT if set by installer/docker
+    env_root = os.environ.get("AEON_ROOT")
+    if env_root:
+        return env_root
 
-def main(argv: list[str]) -> int:
-    # We only simulate: parse args but don't enforce strict schema yet
-    # Expected installer passes:
-    #   --enable-cli / --enable-web / --noninteractive (optional)
-    #   --file:/manifest/manifest.install.json
-    #   --config:/manifest/config/manifest.config.cursed.json
+    # Fallbacks for standalone runs
+    if sys.platform == "darwin":
+        return "/usr/local/aeon"
+    return "/opt/aeon"
 
+
+def to_lower(s: str) -> str:
+    return s.lower()
+
+
+def parse_args(argv: list) -> Tuple[bool, bool, bool, Optional[str], Optional[str]]:
+    cli_enabled = False
+    web_enabled = False
+    noninteractive = False
     file_arg = None
-    cfg_arg = None
+    config_arg = None
 
-    for a in argv[1:]:
-        if a.startswith("--file:"):
-            file_arg = a[len("--file:"):]
-        elif a.startswith("--config:"):
-            cfg_arg = a[len("--config:"):]
-        # ignore others for simulation
+    i = 0
+    while i < len(argv):
+        a = argv[i]
 
-    # Default mapping (relative to /opt/aeon in installer design)
-    # But we accept absolute paths too.
-    root = os.environ.get("AEON_ROOT", "/opt/aeon")
-    if file_arg and file_arg.startswith("/"):
-        install_path = os.path.join(root, file_arg.lstrip("/"))
-    elif file_arg:
-        install_path = os.path.join(root, file_arg)
-    else:
-        install_path = os.path.join(root, "manifest/manifest.install.json")
+        # Flags (short)
+        if a in ("-c", "-C"):
+            cli_enabled = True
+        elif a in ("-w", "-W"):
+            web_enabled = True
+        elif a in ("-n", "-N"):
+            noninteractive = True
 
-    if cfg_arg and cfg_arg.startswith("/"):
-        config_path = os.path.join(root, cfg_arg.lstrip("/"))
-    elif cfg_arg:
-        config_path = os.path.join(root, cfg_arg)
-    else:
-        config_path = os.path.join(root, "manifest/config/manifest.config.cursed.json")
+        # Flags (long, case-insensitive)
+        else:
+            al = to_lower(a)
+            if al in ("--cli-enable", "--enable-cli"):
+                cli_enabled = True
+            elif al in ("--web-enable", "--enable-web"):
+                web_enabled = True
+            elif al == "--noninteractive":
+                noninteractive = True
 
-    # Load and report
-    rc = 0
+            # Path-style params
+            elif al.startswith("--file:"):
+                file_arg = a.split(":", 1)[1]
+            elif al.startswith("--config:"):
+                config_arg = a.split(":", 1)[1]
+            else:
+                # Ignore unknown args in simulation (screen-first)
+                pass
+
+        i += 1
+
+    return cli_enabled, web_enabled, noninteractive, file_arg, config_arg
+
+
+def normalize_repo_path(p: str) -> str:
+    # We accept "/manifest/..." and "manifest/..." and normalize to "manifest/..."
+    if p.startswith("/"):
+        return p[1:]
+    return p
+
+
+def read_json_bool(path: Path, expected_key: str) -> bool:
     try:
-        install_data = _read_json(install_path)
-        print(f"manifest.install.json - {_status('manifest.install.json', install_data)}")
-        if _status("manifest.install.json", install_data) != "success":
-            rc = 2
-    except Exception as e:
-        print(f"manifest.install.json - failed ({e.__class__.__name__}: {e})")
-        rc = 2
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
 
-    try:
-        config_data = _read_json(config_path)
-        print(f"manifest.config.cursed.json - {_status('manifest.config.cursed.json', config_data)}")
-        if _status("manifest.config.cursed.json", config_data) != "success":
-            rc = 2
-    except Exception as e:
-        print(f"manifest.config.cursed.json - failed ({e.__class__.__name__}: {e})")
-        rc = 2
+    # Accept simple forms:
+    # 1) {"<expected_key>": "true"}
+    # 2) {"<expected_key>": true}
+    # 3) {"ok": true} or {"success": true} (best-effort)
+    if isinstance(data, dict):
+        if expected_key in data:
+            v = data.get(expected_key)
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, (int, float)):
+                return v != 0
+            if isinstance(v, str):
+                return v.strip().lower() in ("true", "1", "yes", "y", "ok", "success")
+            return bool(v)
 
-    return rc
+        # best-effort fallbacks
+        for k in ("ok", "success", "passed", "true"):
+            if k in data and isinstance(data[k], bool):
+                return data[k]
+
+    # If someone stores a raw boolean in JSON (rare): true/false
+    if isinstance(data, bool):
+        return data
+
+    return False
+
+
+def main() -> int:
+    aeon_root = Path(default_root())
+
+    cli_enabled, web_enabled, noninteractive, file_arg, config_arg = parse_args(sys.argv[1:])
+
+    # Defaults if not provided
+    if not file_arg:
+        file_arg = "/manifest/manifest.install.json"
+    if not config_arg:
+        config_arg = "/manifest/config/manifest.config.cursed.json"
+
+    file_rel = normalize_repo_path(file_arg)
+    cfg_rel = normalize_repo_path(config_arg)
+
+    file_path = aeon_root / file_rel
+    cfg_path = aeon_root / cfg_rel
+
+    install_ok = file_path.exists() and read_json_bool(file_path, "manifest.install.json")
+    config_ok = cfg_path.exists() and read_json_bool(cfg_path, "manifest.config.cursed.json")
+
+    # Screen-first output
+    print("AEON orchestrator.json.py (simulation)")
+    print(f"AEON_ROOT: {aeon_root}")
+    print(f"cli-enabled: {'true' if cli_enabled else 'false'}")
+    print(f"web-enabled: {'true' if web_enabled else 'false'}")
+    print(f"noninteractive: {'true' if noninteractive else 'false'}")
+    print(f"read manifest.install.json: {'true' if install_ok else 'false'}")
+    print(f"read manifest.config.cursed.json: {'true' if config_ok else 'false'}")
+
+    # Exit code: success only if both reads succeed
+    return 0 if (install_ok and config_ok) else 1
+
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
+    raise SystemExit(main())

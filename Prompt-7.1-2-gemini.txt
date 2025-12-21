@@ -1,0 +1,12 @@
+QA install.bash.v7.1.sh with RTM + PASS/FAIL.
+
+Must validate:
+- setup_logging is actually called (non-silent uses tee after detect_os)
+- silent -n: 0 bytes stdout/stderr even on early failures
+- logs migrate to ${AEON_ROOT}/logfiles (not stuck in /tmp)
+- docker mode mounts /aeon + workdir + AEON_ROOT env + correct orchestrator path
+- docker fallback works
+- macOS brew never root
+- bash 3.2 compatibility
+
+Provide: exact line refs + minimal patch if anything fails.

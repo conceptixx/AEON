@@ -2,6 +2,7 @@
 # AEON Installation Script
 # Supports: Linux (Ubuntu/Debian/Raspbian), macOS, WSL
 # Bash 3.2+ compatible
+# VERSION: 6.1.0
 
 set -euo pipefail
 
@@ -9,7 +10,7 @@ set -euo pipefail
 # CONFIGURATION
 # =============================================================================
 
-AEON_VERSION="3.1.0"
+AEON_VERSION="6.1.0"
 GITHUB_RAW_BASE="https://raw.githubusercontent.com/conceptixx/AEON/main"
 
 # Orchestrator configuration
@@ -35,44 +36,51 @@ AEON_ROOT=""
 BREW_USER=""
 BREW_PATH=""
 LOG_FILE=""
+TEMP_LOG=""
 SILENT_MODE=0
+APT_UPDATED=0
 
 # =============================================================================
-# EARLY INIT SILENT MODE
+# PRE-SCAN NONINTERACTIVE (MUST BE FIRST - ZERO OUTPUT)
 # =============================================================================
 
-early_init_silent() {
-    local tmplog
-    tmplog="/tmp/aeon-install-$$.log"
-    
-    # Redirect all output to log
-    exec 1>"$tmplog"
-    exec 2>&1
-    
-    LOG_FILE="$tmplog"
-    SILENT_MODE=1
-}
+for arg in "$@"; do
+    arg_lower=$(printf '%s\n' "$arg" | tr '[:upper:]' '[:lower:]')
+    case "$arg_lower" in
+        -n|--noninteractive)
+            TEMP_LOG="/tmp/aeon-install-$$.log"
+            exec 1>"$TEMP_LOG" 2>&1
+            SILENT_MODE=1
+            FLAG_NONINTERACTIVE=1
+            break
+            ;;
+    esac
+done
 
 # =============================================================================
 # ARGUMENT PARSING
 # =============================================================================
 
 parse_args() {
+    local count=0
+    local arg_lower
+    
     while [ $# -gt 0 ]; do
-        case "$1" in
-            -c|-C|--cli-enable|--enable-cli|--CLI-ENABLE|--ENABLE-CLI)
+        arg_lower=$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]')
+        
+        case "$arg_lower" in
+            -c|--cli-enable|--enable-cli)
                 FLAG_CLI_ENABLE=1
+                count=$((count + 1))
                 shift
                 ;;
-            -w|-W|--web-enable|--enable-web|--WEB-ENABLE|--ENABLE-WEB)
+            -w|--web-enable|--enable-web)
                 FLAG_WEB_ENABLE=1
+                count=$((count + 1))
                 shift
                 ;;
-            -n|-N|--noninteractive|--NONINTERACTIVE)
-                FLAG_NONINTERACTIVE=1
-                if [ "$SILENT_MODE" -eq 0 ]; then
-                    early_init_silent
-                fi
+            -n|--noninteractive)
+                count=$((count + 1))
                 shift
                 ;;
             *)
@@ -86,6 +94,11 @@ parse_args() {
                 ;;
         esac
     done
+    
+    if [ $count -gt 3 ]; then
+        printf "Error: Maximum 3 flags allowed (c/w/n)\n" >&2
+        exit 2
+    fi
 }
 
 # =============================================================================
@@ -106,6 +119,56 @@ log_error() {
     else
         printf "[AEON ERROR] %s\n" "$*" >&2
     fi
+}
+
+# =============================================================================
+# LOG SETUP
+# =============================================================================
+
+setup_logging() {
+    local logdir="${AEON_ROOT}/logfiles"
+    
+    if [ "$SILENT_MODE" -eq 0 ]; then
+        mkdir -p "$logdir" 2>/dev/null || {
+            log_error "Cannot create log directory: $logdir"
+            return
+        }
+        chown "$AEON_USER:$(id -gn "$AEON_USER")" "$logdir" 2>/dev/null || true
+        
+        LOG_FILE="${logdir}/install.bash.$(date +%Y%m%d-%H%M%S).log"
+        exec > >(tee -a "$LOG_FILE") 2>&1
+        
+        log "Logging to file: $LOG_FILE"
+    else
+        migrate_log_to_final
+    fi
+}
+
+# =============================================================================
+# LOG MIGRATION (TEMP -> FINAL)
+# =============================================================================
+
+migrate_log_to_final() {
+    if [ "$SILENT_MODE" -eq 0 ]; then
+        return
+    fi
+    
+    local logdir="${AEON_ROOT}/logfiles"
+    mkdir -p "$logdir" 2>/dev/null || return
+    chown "$AEON_USER:$(id -gn "$AEON_USER")" "$logdir" 2>/dev/null || true
+    
+    LOG_FILE="${logdir}/install.bash.$(date +%Y%m%d-%H%M%S).log"
+    
+    if [ -n "$TEMP_LOG" ] && [ -f "$TEMP_LOG" ]; then
+        cat "$TEMP_LOG" >> "$LOG_FILE" 2>/dev/null || return
+        rm -f "$TEMP_LOG"
+        exec 1>>"$LOG_FILE" 2>&1
+    else
+        exec 1>>"$LOG_FILE" 2>&1
+    fi
+    
+    chown "$AEON_USER:$(id -gn "$AEON_USER")" "$LOG_FILE" 2>/dev/null || true
+    log "Log migrated to final location: $LOG_FILE"
 }
 
 # =============================================================================
@@ -149,14 +212,12 @@ detect_brew_user() {
         return
     fi
     
-    # Try SUDO_USER first
     if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
         BREW_USER="$SUDO_USER"
         log "Using SUDO_USER for brew: $BREW_USER"
         return
     fi
     
-    # Fallback: console user
     if command -v stat >/dev/null 2>&1; then
         local console_user
         console_user="$(stat -f%Su /dev/console 2>/dev/null || true)"
@@ -176,14 +237,12 @@ detect_brew_path() {
         return
     fi
     
-    # Check if brew is in PATH as BREW_USER
     if sudo -u "$BREW_USER" -H command -v brew >/dev/null 2>&1; then
         BREW_PATH="$(sudo -u "$BREW_USER" -H command -v brew)"
         log "Found brew in PATH: $BREW_PATH"
         return
     fi
     
-    # Check common locations
     for path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
         if [ -x "$path" ]; then
             BREW_PATH="$path"
@@ -209,7 +268,6 @@ install_always_tools() {
         linux|wsl)
             local missing_pkgs=""
             
-            # Check each package
             for pkg in curl wget ca-certificates; do
                 if ! dpkg -s "$pkg" >/dev/null 2>&1; then
                     missing_pkgs="$missing_pkgs $pkg"
@@ -218,34 +276,29 @@ install_always_tools() {
             
             if [ -n "$missing_pkgs" ]; then
                 log "Installing missing packages:$missing_pkgs"
-                apt-get update -qq
+                if [ "$APT_UPDATED" -eq 0 ]; then
+                    apt-get update -qq
+                    APT_UPDATED=1
+                fi
                 apt-get install -y -qq $missing_pkgs
             else
-                log "All always-tools already installed"
+                log "All required tools already installed"
             fi
             ;;
-            
         macos)
-            # curl usually present
-            if ! command -v curl >/dev/null 2>&1; then
-                log_error "curl not found on macOS (unexpected)"
-                exit 1
-            fi
+            local missing_pkgs=""
             
-            # wget via brew if needed
-            if ! command -v wget >/dev/null 2>&1; then
-                log "Installing wget via Homebrew..."
-                sudo -u "$BREW_USER" -H "$BREW_PATH" install wget
-            else
-                log "wget already installed"
-            fi
+            for pkg in curl wget; do
+                if ! sudo -u "$BREW_USER" -H "$BREW_PATH" list "$pkg" >/dev/null 2>&1; then
+                    missing_pkgs="$missing_pkgs $pkg"
+                fi
+            done
             
-            # ca-certificates only if brew available and package missing
-            if sudo -u "$BREW_USER" -H "$BREW_PATH" list ca-certificates >/dev/null 2>&1; then
-                log "ca-certificates already installed"
+            if [ -n "$missing_pkgs" ]; then
+                log "Installing missing packages:$missing_pkgs"
+                sudo -u "$BREW_USER" -H "$BREW_PATH" install $missing_pkgs
             else
-                log "Installing ca-certificates via Homebrew..."
-                sudo -u "$BREW_USER" -H "$BREW_PATH" install ca-certificates || log "ca-certificates install skipped/failed (may be optional)"
+                log "All required tools already installed"
             fi
             ;;
     esac
@@ -258,107 +311,79 @@ install_python() {
         linux|wsl)
             local missing_pkgs=""
             
-            for pkg in python3 python3-pip python3-venv python-is-python3; do
-                if ! dpkg -s "$pkg" >/dev/null 2>&1; then
-                    missing_pkgs="$missing_pkgs $pkg"
-                fi
-            done
+            if ! command -v python3 >/dev/null 2>&1; then
+                missing_pkgs="$missing_pkgs python3"
+            fi
+            if ! dpkg -s python3-venv >/dev/null 2>&1; then
+                missing_pkgs="$missing_pkgs python3-venv"
+            fi
+            if ! dpkg -s python3-pip >/dev/null 2>&1; then
+                missing_pkgs="$missing_pkgs python3-pip"
+            fi
             
             if [ -n "$missing_pkgs" ]; then
-                log "Installing missing Python packages:$missing_pkgs"
-                if [ -z "$(apt-cache policy 2>/dev/null)" ]; then
+                log "Installing Python packages:$missing_pkgs"
+                if [ "$APT_UPDATED" -eq 0 ]; then
                     apt-get update -qq
+                    APT_UPDATED=1
                 fi
                 apt-get install -y -qq $missing_pkgs
             else
                 log "Python already installed"
             fi
             ;;
-            
         macos)
-            # Check if python3 works and venv module available
-            if command -v python3 >/dev/null 2>&1 && python3 -m venv --help >/dev/null 2>&1; then
-                log "Python3 with venv already installed"
+            if ! sudo -u "$BREW_USER" -H "$BREW_PATH" list python@3 >/dev/null 2>&1; then
+                log "Installing Python..."
+                sudo -u "$BREW_USER" -H "$BREW_PATH" install python@3
             else
-                log "Installing Python via Homebrew..."
-                sudo -u "$BREW_USER" -H "$BREW_PATH" install python
+                log "Python already installed"
             fi
             ;;
     esac
 }
 
 install_docker() {
-    if [ "$OS_TYPE" = "macos" ]; then
-        log "Docker installation on macOS requires Docker Desktop (manual install)"
+    log "Checking Docker installation..."
+    
+    if command -v docker >/dev/null 2>&1; then
+        log "Docker already installed"
         return
     fi
     
-    log "Checking Docker installation..."
-    
-    # Check if docker exists
-    if command -v docker >/dev/null 2>&1; then
-        # Check if daemon is running
-        if systemctl is-active docker >/dev/null 2>&1 || service docker status >/dev/null 2>&1; then
-            log "Docker already installed and running"
-            return
-        fi
-        
-        # Docker exists but not running - try to start
-        log "Docker installed but not running, starting..."
-        systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
-        sleep 2
-        
-        if systemctl is-active docker >/dev/null 2>&1 || service docker status >/dev/null 2>&1; then
-            log "Docker started successfully"
-            return
-        fi
-    fi
-    
-    # Need to install Docker
-    log "Installing Docker..."
-    
-    # Detect distro
-    local distro_id
-    if [ -f /etc/os-release ]; then
-        distro_id="$(grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
-        # Raspbian -> Debian
-        if [ "$distro_id" = "raspbian" ]; then
-            distro_id="debian"
-        fi
-    else
-        log_error "Cannot determine Linux distribution"
-        exit 1
-    fi
-    
-    if [ "$distro_id" != "ubuntu" ] && [ "$distro_id" != "debian" ]; then
-        log_error "Docker auto-install only supports Ubuntu/Debian/Raspbian, detected: $distro_id"
-        exit 1
-    fi
-    
-    # Install prerequisites
-    apt-get update -qq
-    apt-get install -y -qq ca-certificates curl gnupg lsb-release
-    
-    # Add Docker GPG key
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL "https://download.docker.com/linux/$distro_id/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    chmod a+r /etc/apt/keyrings/docker.gpg
-    
-    # Add Docker repository
-    printf "deb [arch=%s signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/%s %s stable\n" \
-        "$(dpkg --print-architecture)" \
-        "$distro_id" \
-        "$(lsb_release -cs)" > /etc/apt/sources.list.d/docker.list
-    
-    # Install Docker packages
-    apt-get update -qq
-    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    
-    # Enable and start
-    systemctl enable docker
-    systemctl start docker
-    
-    log "Docker installed and started"
+    case "$OS_TYPE" in
+        linux|wsl)
+            log "Installing Docker..."
+            if [ "$APT_UPDATED" -eq 0 ]; then
+                apt-get update -qq
+                APT_UPDATED=1
+            fi
+            
+            apt-get install -y -qq apt-transport-https gnupg lsb-release
+            
+            local distro
+            distro="$(lsb_release -is | tr '[:upper:]' '[:lower:]')"
+            local codename
+            codename="$(lsb_release -cs)"
+            
+            mkdir -p /etc/apt/keyrings
+            curl -fsSL "https://download.docker.com/linux/${distro}/gpg" | \
+                gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
+            
+            printf "deb [arch=%s signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/%s %s stable\n" \
+                "$(dpkg --print-architecture)" "$distro" "$codename" > /etc/apt/sources.list.d/docker.list
+            
+            apt-get update -qq
+            apt-get install -y -qq docker-ce docker-ce-cli containerd.io
+            
+            systemctl enable docker >/dev/null 2>&1 || true
+            systemctl start docker >/dev/null 2>&1 || true
+            ;;
+        macos)
+            log "Docker Desktop required on macOS"
+            log "Please install from: https://www.docker.com/products/docker-desktop"
+            ;;
+    esac
 }
 
 # =============================================================================
@@ -366,8 +391,6 @@ install_docker() {
 # =============================================================================
 
 create_system_user() {
-    log "Checking system user: $AEON_USER"
-    
     if id "$AEON_USER" >/dev/null 2>&1; then
         log "User $AEON_USER already exists"
         return
@@ -377,19 +400,16 @@ create_system_user() {
     
     case "$OS_TYPE" in
         linux|wsl)
-            useradd -r -s /usr/sbin/nologin -d "$AEON_ROOT" -c "AEON System User" "$AEON_USER" || \
-                useradd -r -s /bin/false -d "$AEON_ROOT" -c "AEON System User" "$AEON_USER"
+            useradd -r -s /bin/bash -d "$AEON_ROOT" -m "$AEON_USER"
             ;;
         macos)
-            # macOS system user creation
-            local maxid
-            maxid=$(dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1)
-            local newid=$((maxid + 1))
+            local next_uid
+            next_uid=$(dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1)
+            next_uid=$((next_uid + 1))
             
             dscl . -create "/Users/$AEON_USER"
-            dscl . -create "/Users/$AEON_USER" UserShell /usr/bin/false
-            dscl . -create "/Users/$AEON_USER" RealName "AEON System User"
-            dscl . -create "/Users/$AEON_USER" UniqueID "$newid"
+            dscl . -create "/Users/$AEON_USER" UserShell /bin/bash
+            dscl . -create "/Users/$AEON_USER" UniqueID "$next_uid"
             dscl . -create "/Users/$AEON_USER" PrimaryGroupID 20
             dscl . -create "/Users/$AEON_USER" NFSHomeDirectory "$AEON_ROOT"
             ;;
@@ -399,14 +419,17 @@ create_system_user() {
 setup_directories() {
     log "Setting up directory structure..."
     
-    mkdir -p "$AEON_ROOT"
-    mkdir -p "$AEON_ROOT/library/orchestrator"
-    mkdir -p "$AEON_ROOT/manifest/config"
-    mkdir -p "$AEON_ROOT/logs"
-    mkdir -p "$AEON_ROOT/data"
+    local dirs="library/orchestrator manifest/config logfiles"
+    local IFS_OLD="$IFS"
+    IFS=" "
+    for dir in $dirs; do
+        IFS="$IFS_OLD"
+        mkdir -p "$AEON_ROOT/$dir"
+    done
+    IFS="$IFS_OLD"
     
-    # Set ownership
     chown -R "$AEON_USER:$(id -gn "$AEON_USER")" "$AEON_ROOT"
+    chmod -R 755 "$AEON_ROOT"
     
     log "Directory structure created"
 }
@@ -414,15 +437,12 @@ setup_directories() {
 setup_sudoers() {
     log "Configuring sudoers for $AEON_USER..."
     
-    local sudoers_file="/etc/sudoers.d/$AEON_USER"
-    local sudoers_content
+    local sudoers_file="/etc/sudoers.d/aeon-system"
     
-    sudoers_content="# AEON System User - Automated Operations
-# Generated by AEON installer v$AEON_VERSION
+    local sudoers_content="# AEON System User Permissions
+# Auto-generated - do not edit manually
 
-# Reboot commands
-$AEON_USER ALL=(ALL) NOPASSWD: /sbin/reboot
-$AEON_USER ALL=(ALL) NOPASSWD: /usr/sbin/reboot
+# Shutdown/reboot
 $AEON_USER ALL=(ALL) NOPASSWD: /sbin/shutdown
 $AEON_USER ALL=(ALL) NOPASSWD: /usr/sbin/shutdown
 $AEON_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot
@@ -439,7 +459,6 @@ $AEON_USER ALL=(ALL) NOPASSWD: /usr/local/bin/docker
     printf "%s\n" "$sudoers_content" > "$sudoers_file"
     chmod 0440 "$sudoers_file"
     
-    # Validate
     if ! visudo -c -f "$sudoers_file" >/dev/null 2>&1; then
         log_error "Sudoers file validation failed"
         rm -f "$sudoers_file"
@@ -483,7 +502,6 @@ manifest/config/manifest.config.cursed.json"
     done
     IFS="$IFS_OLD"
     
-    # Make orchestrator executable
     chmod +x "$AEON_ROOT/library/orchestrator/orchestrator.json.py"
     
     log "All files downloaded successfully"
@@ -504,7 +522,6 @@ setup_python_venv() {
     log "Creating Python virtual environment..."
     sudo -u "$AEON_USER" python3 -m venv "$venv_path"
     
-    # Install dependencies if needed
     if [ -f "$AEON_ROOT/requirements.txt" ]; then
         log "Installing Python dependencies..."
         sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet --upgrade pip
@@ -515,7 +532,6 @@ setup_python_venv() {
 run_orchestrator() {
     log "Running orchestrator..."
     
-    # Build transfer flags
     local transfer_flags=""
     if [ "$FLAG_CLI_ENABLE" -eq 1 ]; then
         transfer_flags="$transfer_flags --cli-enable"
@@ -523,12 +539,13 @@ run_orchestrator() {
     if [ "$FLAG_WEB_ENABLE" -eq 1 ]; then
         transfer_flags="$transfer_flags --web-enable"
     fi
+    if [ "$FLAG_NONINTERACTIVE" -eq 1 ]; then
+        transfer_flags="$transfer_flags --noninteractive"
+    fi
     
-    # Determine mode
     local mode="$AEON_ORCH_MODE"
     if [ "$mode" = "auto" ]; then
         if command -v docker >/dev/null 2>&1; then
-            # Check if daemon is reachable
             local timeout_cmd=""
             if command -v timeout >/dev/null 2>&1; then
                 timeout_cmd="timeout 5"
@@ -550,13 +567,22 @@ run_orchestrator() {
     case "$mode" in
         native)
             run_orchestrator_native "$transfer_flags"
+            return $?
             ;;
         docker)
-            run_orchestrator_docker "$transfer_flags"
+            if run_orchestrator_docker "$transfer_flags"; then
+                return 0
+            else
+                local docker_exit=$?
+                log_error "Docker orchestrator failed with exit code $docker_exit"
+                log "Falling back to native mode..."
+                run_orchestrator_native "$transfer_flags"
+                return $?
+            fi
             ;;
         *)
             log_error "Invalid orchestrator mode: $mode"
-            exit 1
+            return 1
             ;;
     esac
 }
@@ -574,6 +600,8 @@ run_orchestrator_native() {
         $flags \
         --file:/manifest/manifest.install.json \
         --config:/manifest/config/manifest.config.cursed.json
+    
+    return $?
 }
 
 run_orchestrator_docker() {
@@ -581,26 +609,27 @@ run_orchestrator_docker() {
     
     log "Running orchestrator in Docker mode..."
     
-    # Pull image if configured
     if [ "$AEON_ORCH_DOCKER_PULL" -eq 1 ]; then
         log "Pulling Docker image: $AEON_ORCH_DOCKER_IMAGE"
-        docker pull "$AEON_ORCH_DOCKER_IMAGE"
+        if ! docker pull "$AEON_ORCH_DOCKER_IMAGE"; then
+            log_error "Failed to pull Docker image"
+            return 1
+        fi
     fi
     
-    # Build docker run command
-    local docker_args="-v $AEON_ROOT:$AEON_ROOT -w $AEON_ROOT"
+    local docker_args="-v $AEON_ROOT:/aeon -w /aeon -e AEON_ROOT=/aeon"
     
     if [ "$AEON_ORCH_DOCKER_SOCKET" -eq 1 ] && [ -S /var/run/docker.sock ]; then
         docker_args="$docker_args -v /var/run/docker.sock:/var/run/docker.sock"
     fi
     
-    local orchestrator="/library/orchestrator/orchestrator.json.py"
-    
     docker run --rm $docker_args "$AEON_ORCH_DOCKER_IMAGE" \
-        python "$orchestrator" \
+        python /aeon/library/orchestrator/orchestrator.json.py \
         $flags \
         --file:/manifest/manifest.install.json \
         --config:/manifest/config/manifest.config.cursed.json
+    
+    return $?
 }
 
 # =============================================================================
@@ -608,14 +637,11 @@ run_orchestrator_docker() {
 # =============================================================================
 
 finalize_installation() {
-    if [ "$SILENT_MODE" -eq 1 ]; then
-        # Move log to final location
-        local final_log="$AEON_ROOT/logs/install-$(date +%Y%m%d-%H%M%S).log"
-        mkdir -p "$AEON_ROOT/logs"
-        cp "$LOG_FILE" "$final_log"
-        chown "$AEON_USER:$(id -gn "$AEON_USER")" "$final_log"
-        # Don't print anything in silent mode
-    else
+    if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
+        chown "$AEON_USER:$(id -gn "$AEON_USER")" "$LOG_FILE" 2>/dev/null || true
+    fi
+    
+    if [ "$SILENT_MODE" -eq 0 ]; then
         log ""
         log "========================================="
         log "AEON Installation Complete!"
@@ -625,7 +651,7 @@ finalize_installation() {
         log "User: $AEON_USER"
         log ""
         log "Next steps:"
-        log "  - Review logs in $AEON_ROOT/logs/"
+        log "  - Review logs in $AEON_ROOT/logfiles/"
         log "  - Check configuration in $AEON_ROOT/manifest/"
         log ""
     fi
@@ -636,41 +662,44 @@ finalize_installation() {
 # =============================================================================
 
 main() {
-    # Parse args first (may enable silent mode)
     parse_args "$@"
     
-    # Root check
     if [ "$(id -u)" -ne 0 ]; then
         log_error "This script must be run as root"
         exit 1
     fi
     
-    log "AEON Installer v$AEON_VERSION"
-    log "Starting installation..."
+    if [ "$SILENT_MODE" -eq 0 ]; then
+        log "AEON Installer v$AEON_VERSION"
+        log "Starting installation..."
+    else
+        log "Installation started (silent mode)"
+    fi
     
-    # Detection
     detect_os
     detect_brew_user
     detect_brew_path
     
-    # Installation
+    setup_logging
+    
     install_always_tools
     install_python
     install_docker
     
-    # User & permissions
     create_system_user
     setup_directories
     setup_sudoers
     
-    # Download files
     download_files
     
-    # Run orchestrator
-    run_orchestrator
+    if ! run_orchestrator; then
+        log_error "Orchestrator execution failed"
+        finalize_installation
+        exit 1
+    fi
     
-    # Done
     finalize_installation
+    exit 0
 }
 
 main "$@"
