@@ -108,17 +108,17 @@ parse_args() {
 
 log() {
     if [ "$SILENT_MODE" -eq 1 ]; then
-        printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+        printf "[install.bash][%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
     else
-        printf "[AEON] %s\n" "$*"
+        printf "[AEON][install.bash] %s\n" "$*"
     fi
 }
 
 log_error() {
     if [ "$SILENT_MODE" -eq 1 ]; then
-        printf "[%s] ERROR: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+        printf "[install.bash][%s] ERROR: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
     else
-        printf "[AEON ERROR] %s\n" "$*" >&2
+        printf "[AEON ERROR][install.bash] %s\n" "$*" >&2
     fi
 }
 
