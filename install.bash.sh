@@ -632,15 +632,15 @@ run_orchestrator() {
     
 
     # Orchestrator works relative to repo path
-     if [ "$AEON_ORCH_REL" = 1 ]; then
+    if [ "$AEON_ORCH_REL" = 1 ]; then
         manifest="${AEON_ORCH_REPO}/manifest/manifest.install.json"
         config="${AEON_ORCH_REPO}/manifest/config/manifest.config.cursed.json"
     fi
 
     sudo -u "$AEON_USER" -H AEON_ROOT="${orch_root}" python3 "${orchestrator}" \
         $transfer_flags \
-        --file:"${manifest_rel}" \
-        --config:"${config_rel}"
+        --file:"${manifest}" \
+        --config:"${config}"
 
     return $?
 }
