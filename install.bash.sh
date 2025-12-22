@@ -1,12 +1,69 @@
 #!/usr/bin/env bash
-# AEON Installation Script
-# Supports: Linux (Ubuntu/Debian/Raspbian), macOS, WSL
-# Bash 3.2+ compatible
-# VERSION: 1.2.0
+################################################################################
+# AEON Primary Installation Script (Bash)
+################################################################################
+# Description:
+#   Main installation script for AEON (Autonomous Evolving Orchestration Network).
+#   Performs complete system setup including OS detection, package installation,
+#   user creation, directory setup, repository cloning, and orchestrator execution.
+#
+# Supported Platforms:
+#   - Linux: Ubuntu/Debian/Raspbian (apt-based distributions)
+#   - macOS: with Homebrew package manager
+#   - WSL: Windows Subsystem for Linux
+#
+# Version: 1.2.0
+# AEON Version: 6.1.0
+# Requirements: Bash 3.2+, root/sudo privileges, internet connectivity
+#
+# Usage:
+#   sudo ./install_bash.sh [OPTIONS]
+#
+# Options:
+#   -c, --cli-enable       Enable CLI mode
+#   -w, --web-enable       Enable Web interface
+#   -n, --noninteractive   Silent/non-interactive mode (no prompts, log only)
+#
+# Exit Codes:
+#   0 - Success
+#   1 - Runtime error
+#   2 - Invalid arguments
+#
+# Installation Process:
+#   1. Parse command-line arguments
+#   2. Detect operating system and set paths
+#   3. Configure logging (interactive or silent mode)
+#   4. Install required packages (git, python, docker)
+#   5. Create AEON system user with sudo permissions
+#   6. Set up directory structure
+#   7. Clone AEON repository from GitHub
+#   8. Create Python virtual environment
+#   9. Execute orchestrator with manifest-based installation
+#   10. Finalize and display completion summary
+#
+# File Structure Created:
+#   /opt/aeon (Linux/WSL) or /usr/local/aeon (macOS)
+#   ├── library/       - AEON library code
+#   ├── manifest/      - Installation manifests
+#   ├── logfiles/      - Installation logs
+#   ├── tmp/           - Temporary files and repo clone
+#   └── venv/          - Python virtual environment
+#
+# Author: AEON Project
+# Repository: https://github.com/conceptixx/AEON
+################################################################################
 
+# Enable strict error handling:
+# -e: Exit on any command failure
+# -u: Treat unset variables as errors  
+# -o pipefail: Pipelines fail if any command fails
 set -euo pipefail
 
+
 # =============================================================================
+# CONFIGURATION
+# This section defines all global configuration values used throughout
+# the installation. These control paths, permissions, and feature flags.
 # CONFIGURATION
 # =============================================================================
 
@@ -15,6 +72,8 @@ AEON_REPO_URL="https://github.com/conceptixx/AEON.git"
 
 # Orchestrator configuration
 AEON_ORCH_MODE="native"
+AEON_ORCH_REPO="/temp/repo"
+AEON_ORCH_REL=1
 
 # Sudoers commands - broad install/ops permissions
 SUDOERS_INSTALL_CMDS="/usr/bin/apt,/usr/bin/apt-get,/usr/bin/dpkg,/usr/bin/systemctl,/bin/systemctl,/usr/sbin/service,/sbin/service,/usr/bin/snap,/usr/local/bin/brew,/opt/homebrew/bin/brew,/usr/bin/python3,/usr/local/bin/python3,/usr/bin/pip3,/usr/local/bin/pip3,/usr/bin/docker,/usr/local/bin/docker,/usr/bin/docker-compose,/usr/local/bin/docker-compose,/bin/chown,/usr/bin/chown,/bin/chmod,/usr/bin/chmod,/bin/mkdir,/usr/bin/mkdir,/bin/rm,/usr/bin/rm,/bin/cp,/usr/bin/cp,/bin/mv,/usr/bin/mv,/usr/bin/curl,/usr/bin/wget,/usr/bin/git,/usr/local/bin/git"
@@ -40,6 +99,10 @@ APT_UPDATED=0
 
 # =============================================================================
 # PRE-SCAN NONINTERACTIVE (MUST BE FIRST - ZERO OUTPUT)
+# CRITICAL: This section MUST run before any output is generated.
+# It detects --noninteractive flag and redirects ALL output to a log file.
+# This ensures zero console output in automated/CI environments.
+# PRE-SCAN NONINTERACTIVE (MUST BE FIRST - ZERO OUTPUT)
 # =============================================================================
 
 for arg in "$@"; do
@@ -57,6 +120,9 @@ for arg in "$@"; do
 done
 
 # =============================================================================
+# ARGUMENT PARSING
+# Parse and validate command-line flags. Sets feature flags based on
+# provided arguments. Maximum 3 flags allowed (one of each type).
 # ARGUMENT PARSING
 # =============================================================================
 
@@ -102,6 +168,9 @@ parse_args() {
 
 # =============================================================================
 # LOGGING
+# Logging functions that adapt output format based on interactive vs silent mode.
+# Silent mode includes timestamps; interactive mode uses simple formatting.
+# LOGGING
 # =============================================================================
 
 log() {
@@ -121,6 +190,7 @@ log_error() {
 }
 
 # =============================================================================
+# LOG SETUP
 # LOG SETUP
 # =============================================================================
 
@@ -149,6 +219,7 @@ setup_logging() {
 
 # =============================================================================
 # LOG MIGRATION (TEMP -> FINAL)
+# LOG MIGRATION (TEMP -> FINAL)
 # =============================================================================
 
 migrate_log_to_final() {
@@ -174,6 +245,9 @@ migrate_log_to_final() {
 }
 
 # =============================================================================
+# OS DETECTION
+# Detect operating system and set appropriate paths.
+# Sets OS_TYPE and AEON_ROOT variables based on platform.
 # OS DETECTION
 # =============================================================================
 
@@ -206,6 +280,9 @@ detect_os() {
 }
 
 # =============================================================================
+# MACOS BREW USER DETECTION
+# macOS-specific: Detect non-root user for Homebrew operations.
+# Homebrew cannot run as root, so we must identify the console user.
 # MACOS BREW USER DETECTION
 # =============================================================================
 
@@ -260,6 +337,9 @@ detect_brew_path() {
 }
 
 # =============================================================================
+# PACKAGE INSTALLATION - IDEMPOTENT
+# Install required system packages. Uses appropriate package manager
+# (apt for Linux, brew for macOS). Idempotent - safe to run multiple times.
 # PACKAGE INSTALLATION - IDEMPOTENT
 # =============================================================================
 
@@ -341,6 +421,9 @@ install_docker() {
 
 # =============================================================================
 # SYSTEM USER
+# Create dedicated AEON system user with restricted permissions.
+# This user runs AEON services and has specific sudo permissions.
+# SYSTEM USER
 # =============================================================================
 
 create_system_user() {
@@ -384,6 +467,9 @@ create_system_user() {
 
 # =============================================================================
 # DIRECTORIES
+# Create AEON directory structure with appropriate ownership.
+# Directories: library, manifest, logfiles, tmp
+# DIRECTORIES
 # =============================================================================
 
 setup_directories() {
@@ -405,6 +491,9 @@ setup_directories() {
 }
 
 # =============================================================================
+# SUDOERS
+# Configure sudo permissions for AEON system user.
+# Grants passwordless sudo for specific commands needed for operations.
 # SUDOERS
 # =============================================================================
 
@@ -444,12 +533,15 @@ $AEON_USER ALL=(ALL) NOPASSWD: /usr/local/bin/docker
 
 # =============================================================================
 # CLONE REPOSITORY
+# Clone AEON repository from GitHub. If repository exists, update it.
+# Uses shallow clone (--depth 1) for faster download.
+# CLONE REPOSITORY
 # =============================================================================
 
 clone_repo() {
     log "Cloning/updating AEON repository..."
     
-    REPO_DIR="${AEON_ROOT}/tmp/repo"
+    REPO_DIR="${AEON_ROOT}${AEON_ORCH_REPO}"
     
     if [ -d "$REPO_DIR/.git" ]; then
         log "Repository exists, updating..."
@@ -488,6 +580,9 @@ clone_repo() {
 }
 
 # =============================================================================
+# ORCHESTRATOR EXECUTION
+# Set up Python virtual environment and execute the orchestrator.
+# Orchestrator reads manifest files and performs installation actions.
 # ORCHESTRATOR EXECUTION
 # =============================================================================
 
@@ -528,16 +623,19 @@ run_orchestrator() {
     local orchestrator="${REPO_DIR}/library/orchestrator/orchestrator.json.py"
     local manifest="${REPO_DIR}/manifest/manifest.install.json"
     local config="${REPO_DIR}/manifest/config/manifest.config.cursed.json"
+    local orch_root="$REPO_DIR"
     
     if [ ! -f "$orchestrator" ]; then
         log_error "Orchestrator not found at: $orchestrator"
         return 1
     fi
     
-    # Orchestrator soll relativ zum Repo arbeiten
-    local orch_root="$REPO_DIR"
-    local manifest_rel="/manifest/manifest.install.json"
-    local config_rel="/manifest/config/manifest.config.cursed.json"
+
+    # Orchestrator works relative to repo path
+     if [ "$AEON_ORCH_REL" = 1 ]; then
+        manifest="${AEON_ORCH_REPO}/manifest/manifest.install.json"
+        config="${AEON_ORCH_REPO}/manifest/config/manifest.config.cursed.json"
+    fi
 
     sudo -u "$AEON_USER" -H AEON_ROOT="${orch_root}" python3 "${orchestrator}" \
         $transfer_flags \
@@ -548,6 +646,9 @@ run_orchestrator() {
 }
 
 # =============================================================================
+# FINALIZE
+# Finalize installation and display completion summary.
+# Shows version info, paths, and next steps for the user.
 # FINALIZE
 # =============================================================================
 
@@ -573,6 +674,9 @@ finalize_installation() {
 }
 
 # =============================================================================
+# MAIN
+# Main execution flow - orchestrates all installation steps in order.
+# Validates root privileges, then calls each setup function sequentially.
 # MAIN
 # =============================================================================
 

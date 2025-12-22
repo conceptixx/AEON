@@ -1,0 +1,50 @@
+raspi:
+[AEON_BASH] Configuring sudoers for aeon-system...
+[AEON_BASH] Sudoers configuration completed
+[AEON_BASH] Cloning/updating AEON repository...
+[AEON_BASH] Repository exists, updating...
+HEAD is now at 266af9c testing and bugfixing process
+[AEON_BASH] Repository updated successfully
+[AEON_BASH] Repository ready at: /opt/aeon/tmp/repo
+[AEON_BASH] Running orchestrator in native mode...
+[AEON_BASH] Python venv already exists
+ERROR: Path traversal detected: /manifest/manifest.install.json escapes AEON_ROOT
+[AEON_BASH][ERROR] Orchestrator execution failed
+[AEON_BASH] 
+[AEON_BASH] =========================================
+[AEON_BASH] AEON Installation Complete!
+[AEON_BASH] =========================================
+[AEON_BASH] Version: 6.1.0
+[AEON_BASH] Root: /opt/aeon
+[AEON_BASH] User: aeon-system
+[AEON_BASH] 
+[AEON_BASH] Next steps:
+[AEON_BASH]   - Review logs in /opt/aeon/logfiles/
+[AEON_BASH]   - Check configuration in /opt/aeon/manifest/
+[AEON_BASH] 
+pi@aeon-node-2:/opt/aeon/logfiles $ 
+
+macos:
+HEAD is now at 266af9c testing and bugfixing process
+Removing library/python/aeon/__pycache__/
+Removing library/python/aeon/actions/__pycache__/
+Removing runtime/
+[AEON_BASH] Repository updated successfully
+[AEON_BASH] Repository ready at: /usr/local/aeon/tmp/repo
+[AEON_BASH] Running orchestrator in native mode...
+[AEON_BASH] Python venv already exists
+ERROR: Path traversal detected: /manifest/manifest.install.json escapes AEON_ROOT
+[AEON_BASH][ERROR] Orchestrator execution failed
+[AEON_BASH] 
+[AEON_BASH] =========================================
+[AEON_BASH] AEON Installation Complete!
+[AEON_BASH] =========================================
+[AEON_BASH] Version: 6.1.0
+[AEON_BASH] Root: /usr/local/aeon
+[AEON_BASH] User: aeon-system
+[AEON_BASH] 
+[AEON_BASH] Next steps:
+[AEON_BASH]   - Review logs in /usr/local/aeon/logfiles/
+[AEON_BASH]   - Check configuration in /usr/local/aeon/manifest/
+[AEON_BASH] 
+MacBookPro:logfiles nhoeller$ 
