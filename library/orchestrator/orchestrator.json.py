@@ -392,22 +392,22 @@ def main():
             print_summary(result_data)
         
     except UsageError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        print(f"[AEON][orchestrator.json][ERROR]: {e}", file=sys.stderr)
         exit_code = e.exit_code
     except ValidationError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        print(f"[AEON][orchestrator.json][ERROR]: {e}", file=sys.stderr)
         exit_code = e.exit_code
     except DependencyError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        print(f"[AEON][orchestrator.json][ERROR]: {e}", file=sys.stderr)
         exit_code = e.exit_code
     except UserAbortError as e:
-        print(f"ABORTED: {e}", file=sys.stderr)
+        print(f"[AEON][orchestrator.json][ABORTED]: {e}", file=sys.stderr)
         exit_code = e.exit_code
     except OrchestratorError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        print(f"[AEON][orchestrator.json][ERROR]: {e}", file=sys.stderr)
         exit_code = e.exit_code
     except Exception as e:
-        print(f"UNEXPECTED ERROR: {e}", file=sys.stderr)
+        print(f"[AEON][orchestrator.json][UNEXPECTED ERROR]: {e}", file=sys.stderr)
         exit_code = 1
     
     sys.exit(exit_code)
