@@ -10,6 +10,7 @@ AEON_WORKING_DIR="/opt/aeon"
 AEON_TARGET_DIR=""
 AEON_BASH_FILE="install.bash.sh"
 AEON_PWSH_FILE="install.pwrshl.ps1"
+AEON_FLAG_N=0
 
 NORMALIZED_FLAGS=()
 
@@ -28,6 +29,7 @@ normalize_flag() {
             echo "--enable-web"
             ;;
         -n|--noninteractive)
+            AEON_FLAG_N=1
             echo "--noninteractive"
             ;;
         *)
@@ -71,10 +73,10 @@ esac
 #+AEON_TARGET_DIR="${AEON_WORKING_DIR}/tmp"
 AEON_TARGET_DIR="${AEON_WORKING_DIR}/tmp"
 
-echo "[INFO] Detected OS: $OS_TYPE"
+(( AEON_FLAG_N )) || echo "[INFO] Detected OS: $OS_TYPE"
 
 if [ "$OS_TYPE" = "windows" ]; then
-    echo "[INFO] Windows environment detected. Delegating to WSL..."
+    (( AEON_FLAG_N )) || echo "[INFO] Windows environment detected. Delegating to WSL..."
     
     if ! command -v wsl.exe >/dev/null 2>&1; then
         echo "[WARN] WSL not found. Attempting installation..."
@@ -88,7 +90,7 @@ if [ "$OS_TYPE" = "windows" ]; then
                 echo "4. Run this script again" >&2
                 exit 1
             }
-            echo "[INFO] WSL installation initiated. Restart and re-run this script."
+            (( AEON_FLAG_N )) || echo "[INFO] WSL installation initiated. Restart and re-run this script."
             exit 0
         else
             echo "[ERROR] PowerShell not found. Install WSL manually:" >&2
@@ -106,12 +108,12 @@ if [ "$OS_TYPE" = "windows" ]; then
                 echo "Open PowerShell as Admin: wsl --install -d Ubuntu-22.04" >&2
                 exit 1
             }
-            echo "[INFO] Ubuntu-22.04 installation initiated. Restart and re-run."
+            (( AEON_FLAG_N )) || echo "[INFO] Ubuntu-22.04 installation initiated. Restart and re-run."
             exit 0
         fi
     fi
     
-    echo "[INFO] Executing bootstrap in WSL Ubuntu-22.04..."
+    (( AEON_FLAG_N )) || echo "[INFO] Executing bootstrap in WSL Ubuntu-22.04..."
     
     WSL_CMD="set -e; "
     WSL_CMD="${WSL_CMD}echo '[WSL] Checking for downloader...'; "
@@ -140,29 +142,29 @@ if [ "$OS_TYPE" = "windows" ]; then
     exit $?
 fi
 
-echo "[INFO] Ensuring downloader availability..."
+(( AEON_FLAG_N )) || echo "[INFO] Ensuring downloader availability..."
 
 DOWNLOADER=""
 if command -v curl >/dev/null 2>&1; then
     DOWNLOADER="curl -fsSL"
-    echo "[INFO] Using curl"
+    (( AEON_FLAG_N )) || echo "[INFO] Using curl"
 elif command -v wget >/dev/null 2>&1; then
     DOWNLOADER="wget -qO-"
-    echo "[INFO] Using wget"
+    (( AEON_FLAG_N )) || echo "[INFO] Using wget"
 else
     echo "[WARN] Neither curl nor wget found. Attempting installation..."
     
     if [ "$OS_TYPE" = "linux" ]; then
         if command -v apt-get >/dev/null 2>&1; then
-            echo "[INFO] Installing curl via apt-get..."
+            (( AEON_FLAG_N )) || echo "[INFO] Installing curl via apt-get..."
             sudo apt-get update -qq && sudo apt-get install -y curl
             DOWNLOADER="curl -fsSL"
         elif command -v yum >/dev/null 2>&1; then
-            echo "[INFO] Installing curl via yum..."
+            (( AEON_FLAG_N )) || echo "[INFO] Installing curl via yum..."
             sudo yum install -y curl
             DOWNLOADER="curl -fsSL"
         elif command -v dnf >/dev/null 2>&1; then
-            echo "[INFO] Installing curl via dnf..."
+            (( AEON_FLAG_N )) || echo "[INFO] Installing curl via dnf..."
             sudo dnf install -y curl
             DOWNLOADER="curl -fsSL"
         else
@@ -171,7 +173,7 @@ else
         fi
     elif [ "$OS_TYPE" = "macos" ]; then
         if command -v brew >/dev/null 2>&1; then
-            echo "[INFO] Installing curl via Homebrew..."
+            (( AEON_FLAG_N )) || echo "[INFO] Installing curl via Homebrew..."
             brew install curl
             DOWNLOADER="curl -fsSL"
         else
@@ -185,19 +187,19 @@ fi
 TEMP_FILE=$(mktemp)
 trap "rm -f '$TEMP_FILE'" EXIT
 
-echo "[INFO] Downloading ${AEON_BASH_FILE}..."
+(( AEON_FLAG_N )) || echo "[INFO] Downloading ${AEON_BASH_FILE}..."
 $DOWNLOADER "${AEON_RAW_BASE_URL}/${AEON_BASH_FILE}" > "$TEMP_FILE"
 
-echo "[INFO] Creating target directory: ${AEON_TARGET_DIR}"
+(( AEON_FLAG_N )) || echo "[INFO] Creating target directory: ${AEON_TARGET_DIR}"
 sudo mkdir -p "$AEON_TARGET_DIR"
 
-echo "[INFO] Copying to ${AEON_TARGET_DIR}/${AEON_BASH_FILE}"
+(( AEON_FLAG_N )) || echo "[INFO] Copying to ${AEON_TARGET_DIR}/${AEON_BASH_FILE}"
 sudo cp "$TEMP_FILE" "${AEON_TARGET_DIR}/${AEON_BASH_FILE}"
 
-echo "[INFO] Setting executable permissions..."
+(( AEON_FLAG_N )) || echo "[INFO] Setting executable permissions..."
 sudo chmod +x "${AEON_TARGET_DIR}/${AEON_BASH_FILE}"
 
-echo "[INFO] Executing ${AEON_BASH_FILE}..."
+(( AEON_FLAG_N )) || echo "[INFO] Executing ${AEON_BASH_FILE}..."
 if [ "$(id -u)" -eq 0 ]; then
     "${AEON_TARGET_DIR}/${AEON_BASH_FILE}" "${NORMALIZED_FLAGS[@]}"
 else
