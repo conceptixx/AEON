@@ -72,7 +72,7 @@ AEON_REPO_URL="https://github.com/conceptixx/AEON.git"
 
 # Orchestrator configuration
 AEON_ORCH_MODE="native"
-AEON_ORCH_REPO="temp/repo"
+AEON_ORCH_REPO="tmp/repo"
 AEON_ORCH_REL=1
 
 # Sudoers commands - broad install/ops permissions
