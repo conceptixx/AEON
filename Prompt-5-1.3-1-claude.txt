@@ -1,0 +1,65 @@
+You are Claude Sonnet 4.5. no local file access.
+
+TASK: Create AEON Orchestrator update as a patch-style iteration.
+Output file must be named: orchestrator.json.v1.3.py
+It must contain in the header comment: VERSION: 1.3.0
+
+INPUTS (assume these files exist in repo):
+- Existing orchestrator: library/orchestrator/orchestrator.json.py (current baseline v1.2.x)
+- Example instruction entry: manifest/manifest.install.json (or install.entry.json if present)
+- Example config: manifest/config/manifest.config.cursed.json
+- Existing action registry and dummy action modules remain unchanged.
+
+MANDATORY CHANGE:
+- Orchestrator must accept ANY CLI flags/args.
+- Only bootstrap args are hardcoded:
+  - --file:/path  (required, may appear multiple times)
+  - --config:/path (optional, may appear multiple times)
+- ALL other flags/args must NOT trigger exit(2) anymore. They must be collected into raw_args[].
+- The allowed/parsed flags MUST be defined inside the entry instruction JSON (manifest), e.g. under:
+  "cli": { "flags_schema": { ... }, "unknown_policy": "warn|error|ignore" }
+  (You decide the exact schema, but it must be explicit, documented, and validated.)
+
+IMPLEMENTATION REQUIREMENTS:
+1) Parse argv into:
+   - files[] from --file:
+   - configs[] from --config:
+   - raw_args[] = everything else (including -c -w -n etc)
+2) Load ONLY the first --file: as entry instruction.
+   - Validate that all referenced expected_files exist per current policies.
+3) From the entry instruction, read flags_schema and parse raw_args accordingly:
+   - Support boolean flags with aliases (e.g. -n, --noninteractive)
+   - Support value flags (--foo=bar or --foo bar)
+   - Apply defaults from schema
+   - Enforce unknown_policy from schema:
+     - warn: add to context.warnings
+     - error: exit code 2
+     - ignore: drop silently
+4) The noninteractive mode must be decided from the parsed flags (context.flags.noninteractive),
+   NOT hardcoded by directly checking -n in argv.
+5) Keep existing exit code policy:
+   - 0 success
+   - 1 runtime/step failure
+   - 2 CLI usage/invalid according to schema/required bootstrap args missing
+   - 3 validation/schema/file missing (required_now)
+   - 4 dependency/import/registry failure
+6) Keep AEON_ROOT fallback:
+   - darwin => /usr/local/aeon
+   - else => /opt/aeon
+7) Keep safe path resolving inside AEON_ROOT (no traversal).
+8) Keep stdout summary behavior configurable via manifest outputs section.
+
+ALSO UPDATE EXAMPLE ENTRY MANIFEST:
+- Provide a minimal updated manifest/manifest.install.json (or install.entry.json) that defines flags_schema for:
+  - -c / --enable-cli => sets flags.cli_enabled = true
+  - -w / --enable-web => sets flags.web_enabled = true
+  - -n / --noninteractive => sets flags.noninteractive = true
+- Default all three to false.
+- unknown_policy should be "warn" for now.
+- Keep required_now and required_eventually examples.
+
+DELIVERABLES:
+- Full content of orchestrator.json.v1.3.py
+- Updated example manifest JSON content
+- A short RTM + minimal manual test plan (commands + expected exit codes)
+Do NOT assume any local machine paths; only repo-relative paths under AEON_ROOT.
