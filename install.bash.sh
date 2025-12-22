@@ -72,7 +72,7 @@ AEON_REPO_URL="https://github.com/conceptixx/AEON.git"
 
 # Orchestrator configuration
 AEON_ORCH_MODE="native"
-AEON_ORCH_REPO="tmp/repo"
+AEON_ORCH_REPO="/tmp/repo"
 AEON_ORCH_REL=1
 
 # Sudoers commands - broad install/ops permissions
@@ -541,7 +541,7 @@ $AEON_USER ALL=(ALL) NOPASSWD: /usr/local/bin/docker
 clone_repo() {
     log "Cloning/updating AEON repository..."
     
-    REPO_DIR="${AEON_ROOT}/${AEON_ORCH_REPO}"
+    REPO_DIR="${AEON_ROOT}${AEON_ORCH_REPO}"
     
     if [ -d "$REPO_DIR/.git" ]; then
         log "Repository exists, updating..."
@@ -633,8 +633,8 @@ run_orchestrator() {
 
     # Orchestrator works relative to repo path
     if [ "$AEON_ORCH_REL" = 1 ]; then
-        manifest="${AEON_ORCH_REPO}/manifest/manifest.install.json"
-        config="${AEON_ORCH_REPO}/manifest/config/manifest.config.cursed.json"
+        manifest="manifest/manifest.install.json"
+        config="manifest/config/manifest.config.cursed.json"
     fi
 
     sudo -u "$AEON_USER" -H AEON_ROOT="${orch_root}" python3 "${orchestrator}" \

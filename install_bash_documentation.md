@@ -399,15 +399,15 @@ sudo -u "$AEON_USER" -H \
   python3 "${REPO_DIR}/library/orchestrator/orchestrator.json.py" \
     --cli-enable \                              # Optional flags
     --web-enable \                              # passed from command line
-    --file:"/tmp/repo/manifest/manifest.install.json" \   # Main manifest
-    --config:"/tmp/repo/manifest/config/manifest.config.cursed.json"  # Config
+    --file:"manifest/manifest.install.json" \   # Main manifest
+    --config:"manifest/config/manifest.config.cursed.json"  # Config
 ```
 --file: is influenced by the global `"AEON_ORCH_REL"`
-  - if set to 1 the path /tmp/repo/manifest/manifest.install.json is used
+  - if set to 1 the path manifest/manifest.install.json is used
   - if set to 0 the path `${AEON_ROOT}`/tmp/repo/manifest/manifest.install.json is used
 
 --config: is influenced by the global `"AEON_ORCH_REL"`
-  - if set to 1 the path /tmp/repo/manifest/config/manifest.config.cursed.json is used
+  - if set to 1 the path manifest/config/manifest.config.cursed.json is used
   - if set to 0 the path `${AEON_ROOT}`/tmp/repo/manifest/config/manifest.config.cursed.json is used
 
 
