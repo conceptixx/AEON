@@ -72,7 +72,7 @@ AEON_REPO_URL="https://github.com/conceptixx/AEON.git"
 
 # Orchestrator configuration
 AEON_ORCH_MODE="native"
-AEON_ORCH_REPO="/tmp/repo"
+AEON_ORCH_REPO="tmp/repo"
 AEON_ORCH_REL=1
 
 # Sudoers commands - broad install/ops permissions
@@ -152,8 +152,8 @@ parse_args() {
                 printf "Error: Unknown flag '%s'\n" "$1" >&2
                 printf "\nUsage: %s [OPTIONS]\n" "$0" >&2
                 printf "Options:\n" >&2
-                printf "  -c, --cli-enable       Enable CLI mode\n" >&2
-                printf "  -w, --web-enable       Enable Web mode\n" >&2
+                printf "  -c, --enable-cli       Enable CLI mode\n" >&2
+                printf "  -w, --enable-web       Enable Web mode\n" >&2
                 printf "  -n, --noninteractive   Non-interactive silent mode\n" >&2
                 exit 2
                 ;;
@@ -541,7 +541,7 @@ $AEON_USER ALL=(ALL) NOPASSWD: /usr/local/bin/docker
 clone_repo() {
     log "Cloning/updating AEON repository..."
     
-    REPO_DIR="${AEON_ROOT}${AEON_ORCH_REPO}"
+    REPO_DIR="${AEON_ROOT}/${AEON_ORCH_REPO}"
     
     if [ -d "$REPO_DIR/.git" ]; then
         log "Repository exists, updating..."
@@ -609,10 +609,10 @@ run_orchestrator() {
     
     local transfer_flags=""
     if [ "$FLAG_CLI_ENABLE" -eq 1 ]; then
-        transfer_flags="$transfer_flags --cli-enable"
+        transfer_flags="$transfer_flags --enable-cli"
     fi
     if [ "$FLAG_WEB_ENABLE" -eq 1 ]; then
-        transfer_flags="$transfer_flags --web-enable"
+        transfer_flags="$transfer_flags --enable-web"
     fi
     if [ "$FLAG_NONINTERACTIVE" -eq 1 ]; then
         transfer_flags="$transfer_flags --noninteractive"
@@ -630,7 +630,7 @@ run_orchestrator() {
         return 1
     fi
     
-
+#TODO add ${AEON_ORCH_REPO}/
     # Orchestrator works relative to repo path
     if [ "$AEON_ORCH_REL" = 1 ]; then
         manifest="manifest/manifest.install.json"
