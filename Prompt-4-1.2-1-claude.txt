@@ -1,0 +1,112 @@
+You are a senior software architect. Produce a single Bash script file.
+
+NO LOCAL FILE ACCESS. You may only use the text provided in this prompt. Do not assume any files exist unless you create them or clone the repo as specified.
+
+OUTPUT REQUIREMENTS
+- Output ONLY the final script content (no explanations), as a single file.
+- Target filename: install.bash.v1.2.sh
+- The header MUST include an exact version line:
+  # VERSION: 1.2.0
+- Bash compatibility: Bash 3.2+ (macOS default). No Bash 4-only features (no ${var,,}, no associative arrays).
+
+GOAL
+Implement AEON installer "install.bash.v1.2.sh" that:
+- Accepts up to 3 flags total: -c/-C/--cli-enable/--enable-cli, -w/-W/--web-enable/--enable-web, -n/-N/--noninteractive.
+- Long flags must be case-insensitive.
+- -c/-w are only forwarded to orchestrator (as --enable-cli / --enable-web).
+- -n means: absolutely silent mode (0 bytes on stdout+stderr). All output must go to a logfile.
+  - Use /tmp only as EARLY fallback before AEON_ROOT is known/usable.
+  - Final logs MUST be in: ${AEON_ROOT}/logfiles/
+  - Implement log migration from temp to final after AEON_ROOT is established and writable.
+
+OS / PATH RULES
+- Linux + WSL: AEON_ROOT="/opt/aeon"
+- macOS: AEON_ROOT="/usr/local/aeon"
+- Create ${AEON_ROOT}/tmp and ${AEON_ROOT}/logfiles as needed.
+- Must run as root (or via sudo). If not root, exit 1 with a clear error (but remember: if -n is set, it must still be silent).
+
+DEPENDENCIES TO ENSURE/INSTALL
+Always required (Linux/macOS):
+- curl OR wget
+- ca-certificates
+- git
+Linux additionally:
+- python3, python3-venv, python3-pip, python-is-python3 (best effort per distro)
+macOS additionally:
+- Homebrew must NOT be run as root. If brew is missing, fail with instructions.
+- Ensure python3 (via brew if needed), pip, venv (Python stdlib) are available.
+
+Docker (Linux best-practice)
+- On Linux, if Docker is missing: install Docker Engine using Docker’s official repository method (keyring + repo).
+- If Docker exists: validate daemon availability (e.g. docker info with timeout). If unavailable, treat as not usable.
+- macOS: do NOT auto-install Docker Desktop; only detect and proceed (or choose native mode).
+
+AEON SYSTEM USER + PERMISSIONS
+- Create system user "aeon-system" (non-login).
+  - Linux: system user, no password, nologin shell.
+  - macOS: dscl-based user, non-login shell, no password login.
+- Ensure ownership:
+  - ${AEON_ROOT} owned by aeon-system (recursive is OK).
+- Sudoers (NOPASSWD) for aeon-system:
+  - reboot commands (provide common paths)
+  - installation commands (curl, wget, apt/apt-get/dpkg, yum/dnf, pacman, apk, zypper, brew paths for macOS)
+  - ALL docker commands (docker)
+- Sudoers policy must be defined via variables near the top of the script (easy to edit).
+- Write sudoers file to /etc/sudoers.d/aeon-system with mode 0440 and validate with visudo -c -f.
+
+CRITICAL ARCH CHANGE (V1.2)
+Stop downloading individual repo files via raw URLs for orchestrator assets.
+Instead:
+- Clone the AEON GitHub repo into: ${AEON_ROOT}/tmp/repo
+  Default repo URL (configurable variable): https://github.com/conceptixx/AEON.git
+  Default branch: main
+- Clone/update strategy must be robust and idempotent:
+  - If repo absent: git clone --depth 1 --branch main
+  - If repo present: git fetch origin, git reset --hard origin/main, and git clean -fd (safe automation)
+  - Run git commands as user "aeon-system" if possible (recommended), otherwise root but fix ownership after.
+- After clone/update, ensure the LIVE AEON tree has needed runtime files by copying from repo:
+  - If ${AEON_ROOT}/library does not contain required assets, copy them from ${AEON_ROOT}/tmp/repo/library -> ${AEON_ROOT}/library
+  - Ensure ${AEON_ROOT}/manifest and ${AEON_ROOT}/manifest/config exist; copy manifest.install.json and manifest.config.cursed.json from repo if missing.
+  - Do NOT error if a file is intended to be generated later; but for v1.2 we assume these are present in repo.
+
+ORCHESTRATOR EXECUTION
+- Run orchestrator as user aeon-system (not root), but allow it to use sudo NOPASSWD for permitted operations.
+- Call:
+  python orchestrator.json.py (from the cloned repo path OR the copied live path)
+  with args:
+    (forwarded flags) --file:/manifest/manifest.install.json --config:/manifest/config/manifest.config.cursed.json
+- Provide two modes:
+  - AEON_ORCH_MODE=auto|docker|native (env var; default auto)
+  - auto selects docker only if docker daemon is usable; otherwise native.
+- Docker mode:
+  - Use image python:3.11-slim
+  - Mount AEON_ROOT to /aeon
+  - Set AEON_ROOT=/aeon in container
+  - Workdir /aeon
+  - Run python against /aeon/... (repo path or live path, but must be correct)
+  - If docker mode fails, fall back to native mode.
+- Native mode:
+  - Create venv under ${AEON_ROOT}/tmp/venv
+  - Run orchestrator using that venv’s python
+  - Execute as user aeon-system
+
+EXIT CODES
+- 0 success
+- 1 generic failure
+- 2 usage/flags error (unknown flag, >3 flags)
+(You can add more internally but these must remain.)
+
+SILENT MODE TEST REQUIREMENT
+When run as:
+  sudo ./install.bash.v1.2.sh -n 1>out.txt 2>err.txt || true
+Then:
+  wc -c out.txt err.txt
+must show 0 bytes for both.
+All output must appear in ${AEON_ROOT}/logfiles/install.bash.<timestamp>.log
+
+OPTIONAL (nice)
+- Minimal on-screen output when NOT -n (short, readable).
+- Idempotent installs (don’t reinstall packages if already present).
+
+DELIVERABLE
+Return only the full content of install.bash.v1.2.sh with the VERSION header line.

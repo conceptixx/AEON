@@ -1,0 +1,32 @@
+Task: Refactor install.bash.sh to use a repo clone workspace instead of downloading individual files.
+
+Constraints:
+- Bash 3.2 compatible (macOS default bash)
+- Keep existing CLI flags: -c/-w forwarded only, -n silent mode (0 bytes to stdout/stderr).
+- Keep logging policy: final logs under ${AEON_ROOT}/logfiles/; /tmp only as early fallback, migrate after AEON_ROOT known.
+- Keep OS roots: Linux/WSL -> /opt/aeon, macOS -> /usr/local/aeon.
+- Keep user aeon-system creation + sudoers logic + ownership of AEON_ROOT.
+- Keep Docker/native orchestrator mode selection and docker mount /aeon mapping if docker mode is used.
+
+NEW REQUIRED BEHAVIOR:
+1) Ensure 'git' exists:
+   - Linux: install via apt-get/yum/dnf/pacman/apk/zypper best-effort
+   - macOS: require brew; install git via brew (brew must NOT run as root; use SUDO_USER)
+2) Clone repo into ${AEON_ROOT}/tmp/repo (configurable variables at top):
+   - Default repo: https://github.com/conceptixx/AEON.git
+   - Branch: main
+   - If repo exists, do 'git fetch --all' and 'git reset --hard origin/main' (clean update)
+3) After clone/update, run orchestrator from the repo path:
+   - Orchestrator path: ${AEON_ROOT}/tmp/repo/library/orchestrator/orchestrator.json.py
+   - Instruction file path: ${AEON_ROOT}/tmp/repo/manifest/manifest.install.json
+   - Config path: ${AEON_ROOT}/tmp/repo/manifest/config/manifest.config.cursed.json
+   - Set AEON_ROOT env for orchestrator to ${AEON_ROOT}
+4) Orchestrator should run as aeon-system user (sudo -u aeon-system -H ...)
+5) Do NOT require copying registry/actions beforehand; they are available in the repo clone.
+
+Output:
+- Provide full updated install.bash.sh.
+- Provide a short section listing what changed and where.
+
+Input:
+- Current install.bash.sh content pasted below.
