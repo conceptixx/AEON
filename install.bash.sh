@@ -541,7 +541,7 @@ $AEON_USER ALL=(ALL) NOPASSWD: /usr/local/bin/docker
 clone_repo() {
     log "Cloning/updating AEON repository..."
     
-    REPO_DIR="${AEON_ROOT}${AEON_ORCH_REPO}"
+    REPO_DIR="${AEON_ROOT}/${AEON_ORCH_REPO}"
     
     if [ -d "$REPO_DIR/.git" ]; then
         log "Repository exists, updating..."
