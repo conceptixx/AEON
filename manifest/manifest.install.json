@@ -54,8 +54,8 @@
   
   "required_now": [
     "library/orchestrator/orchestrator.json.py",
-    "library/actions/registry.json",
-    "manifest/config/manifest.config.default.json"
+    "library/python/actions/registry.json",
+    "manifest/config/manifest.config.cursed.json"
   ],
   
   "required_eventually": [
