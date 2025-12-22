@@ -534,11 +534,16 @@ run_orchestrator() {
         return 1
     fi
     
-    sudo -u "$AEON_USER" -H AEON_ROOT="${AEON_ROOT}" python3 "$orchestrator" \
+    # Orchestrator soll relativ zum Repo arbeiten
+    local orch_root="$REPO_DIR"
+    local manifest_rel="/manifest/manifest.install.json"
+    local config_rel="/manifest/config/manifest.config.cursed.json"
+
+    sudo -u "$AEON_USER" -H AEON_ROOT="${orch_root}" python3 "${orchestrator}" \
         $transfer_flags \
-        --file:"$manifest" \
-        --config:"$config"
-    
+        --file:"${manifest_rel}" \
+        --config:"${config_rel}"
+
     return $?
 }
 
