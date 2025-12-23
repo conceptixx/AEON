@@ -53,15 +53,15 @@
   },
   
   "required_now": [
-    "library/orchestrator/orchestrator.json.py",
-    "library/python/actions/registry.json",
-    "manifest/config/manifest.config.cursed.json"
+    "library/orchestrator/engines/python/orchestrator.json.py",
+    "library/actions/python/registry.json",
+    "manifest/config/python/manifest.config.cursed.json"
   ],
   
   "required_eventually": [
-    "library/actions/install_docker.py",
-    "library/actions/configure_network.py",
-    "library/actions/validate_system.py"
+    "library/actions/python/install_docker.py",
+    "library/actions/python/configure_network.py",
+    "library/actions/python/validate_system.py"
   ],
   
   "actions": [
