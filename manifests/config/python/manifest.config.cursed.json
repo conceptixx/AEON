@@ -1,0 +1,14 @@
+{
+  "schema": "aeon.config",
+  "version": "1.0",
+  "id": "manifest.config.cursed",
+  "ui": {
+    "theme": "dark",
+    "menu_style": "curses",
+    "confirmation_required": true
+  },
+  "services": {
+    "available": ["tailscale", "nginx", "postgres", "redis"],
+    "default": ["tailscale", "nginx"]
+  }
+}

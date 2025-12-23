@@ -620,9 +620,9 @@ run_orchestrator() {
     
     setup_python_venv
     
-    local orchestrator="${REPO_DIR}/library/orchestrator/orchestrator.json.py"
-    local manifest="${REPO_DIR}/manifest/manifest.install.json"
-    local config="${REPO_DIR}/manifest/config/manifest.config.cursed.json"
+    local orchestrator="${REPO_DIR}/library/orchestrator/engines/python/orchestrator.json.py"
+    local manifest="${REPO_DIR}/manifest/install/manifest.install.json"
+#    local config="${REPO_DIR}/manifest/config/manifest.config.cursed.json"
     local orch_root="$REPO_DIR"
     
     if [ ! -f "$orchestrator" ]; then
@@ -633,8 +633,8 @@ run_orchestrator() {
 #TODO add ${AEON_ORCH_REPO}/
     # Orchestrator works relative to repo path
     if [ "$AEON_ORCH_REL" = 1 ]; then
-        manifest="manifest/manifest.install.json"
-        config="manifest/config/manifest.config.cursed.json"
+        manifest="manifest/install/manifest.install.json"
+        config="manifest/config/python/manifest.config.cursed.json"
     fi
 
     sudo -u "$AEON_USER" -H AEON_ROOT="${orch_root}" python3 "${orchestrator}" \
