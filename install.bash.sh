@@ -622,7 +622,7 @@ run_orchestrator() {
     
     local orchestrator="${REPO_DIR}/library/orchestrator/engines/python/orchestrator.json.py"
     local manifest="${REPO_DIR}/manifest/install/manifest.install.json"
-#    local config="${REPO_DIR}/manifest/config/manifest.config.cursed.json"
+    local config="${REPO_DIR}/manifest/config/python/manifest.config.cursed.json"
     local orch_root="$REPO_DIR"
     
     if [ ! -f "$orchestrator" ]; then
