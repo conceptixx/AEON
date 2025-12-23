@@ -515,6 +515,11 @@ setup_directories() {
 }
 
 source_install_env_post_clone() {
+echo "..."
+echo "..."
+echo "... ${AEON_ROOT}/${AEON_ORCH_REPO}/${AEON_INSTALL_ENV_REL_PATH}"
+echo "..."
+echo "..."
     local env_file="${AEON_ROOT}/${AEON_ORCH_REPO}/${AEON_INSTALL_ENV_REL_PATH}"
 
     if [ ! -f "$env_file" ]; then
