@@ -75,30 +75,6 @@ AEON_ORCH_MODE="native"
 AEON_ORCH_REPO="tmp/repo"
 AEON_ORCH_REL=1
 
-# =============================================================================
-# POST-CLONE ENV (install.env)
-# This file is created (if missing) under:
-#   ${AEON_ROOT}/runtime/env/install/install.env
-# and sourced AFTER the repository clone.
-#
-# IMPORTANT:
-# - Only put variables here that are safe to apply post-clone.
-# - Variables that affect pre-clone steps (e.g. AEON_USER, AEON_ROOT,
-#   AEON_REPO_URL, AEON_ORCH_REPO) must remain in the script.
-# =============================================================================
-
-# Where to write/read the post-clone env file (relative to AEON_ROOT)
-AEON_INSTALL_ENV_REL_PATH="runtime/env/install/install.env"
-
-# Orchestrator paths (relative to cloned repo root)
-AEON_ORCH_ENGINE_REL_PATH="library/orchestrator/engines/python/orchestrator.json.py"
-AEON_ORCH_MANIFEST_REL_PATH="manifest/install/manifest.install.json"
-AEON_ORCH_CONFIG_REL_PATH="manifest/config/python/manifest.config.cursed.json"
-
-# Python venv + requirements (relative to AEON_ROOT / repo)
-AEON_VENV_REL_PATH="venv"
-AEON_PY_REQUIREMENTS_REL_PATH="requirements.txt"
-
 # Sudoers commands - broad install/ops permissions
 SUDOERS_INSTALL_CMDS="/usr/bin/apt,/usr/bin/apt-get,/usr/bin/dpkg,/usr/bin/systemctl,/bin/systemctl,/usr/sbin/service,/sbin/service,/usr/bin/snap,/usr/local/bin/brew,/opt/homebrew/bin/brew,/usr/bin/python3,/usr/local/bin/python3,/usr/bin/pip3,/usr/local/bin/pip3,/usr/bin/docker,/usr/local/bin/docker,/usr/bin/docker-compose,/usr/local/bin/docker-compose,/bin/chown,/usr/bin/chown,/bin/chmod,/usr/bin/chmod,/bin/mkdir,/usr/bin/mkdir,/bin/rm,/usr/bin/rm,/bin/cp,/usr/bin/cp,/bin/mv,/usr/bin/mv,/usr/bin/curl,/usr/bin/wget,/usr/bin/git,/usr/local/bin/git"
 
@@ -499,7 +475,7 @@ create_system_user() {
 setup_directories() {
     log "Setting up AEON directories..."
     
-    local dirs="library manifest logfiles tmp runtime/env/install"
+    local dirs="library manifest logfiles tmp"
     
     for dir in $dirs; do
         local path="$AEON_ROOT/$dir"
@@ -512,24 +488,6 @@ setup_directories() {
     chown -R "$AEON_USER:$(id -gn "$AEON_USER")" "$AEON_ROOT"
     
     log "Directory structure ready"
-}
-
-source_install_env_post_clone() {
-    local env_file="${AEON_ROOT}/${AEON_INSTALL_ENV_REL_PATH}"
-
-    if [ ! -f "$env_file" ]; then
-        log "No install.env found to source (expected at $env_file)"
-        return 0
-    fi
-
-    log "Sourcing install.env (post-clone): $env_file"
-    # shellcheck disable=SC1090
-    . "$env_file"
-
-    # Minimal sanity checks (avoid running with empty critical vars)
-    : "${AEON_ORCH_ENGINE_REL_PATH:?AEON_ORCH_ENGINE_REL_PATH missing after sourcing install.env}"
-    : "${AEON_ORCH_MANIFEST_REL_PATH:?AEON_ORCH_MANIFEST_REL_PATH missing after sourcing install.env}"
-    : "${AEON_ORCH_CONFIG_REL_PATH:?AEON_ORCH_CONFIG_REL_PATH missing after sourcing install.env}"
 }
 
 # =============================================================================
@@ -629,7 +587,7 @@ clone_repo() {
 # =============================================================================
 
 setup_python_venv() {
-    local venv_path="${AEON_ROOT}/${AEON_VENV_REL_PATH}"
+    local venv_path="$AEON_ROOT/venv"
     
     if [ -d "$venv_path" ]; then
         log "Python venv already exists"
@@ -639,12 +597,10 @@ setup_python_venv() {
     log "Creating Python virtual environment..."
     sudo -u "$AEON_USER" python3 -m venv "$venv_path"
     
-    # Prefer requirements from the cloned repo root (more likely than AEON_ROOT)
-    local req_file="${REPO_DIR}/${AEON_PY_REQUIREMENTS_REL_PATH}"
-    if [ -f "$req_file" ]; then
+    if [ -f "$AEON_ROOT/requirements.txt" ]; then
         log "Installing Python dependencies..."
         sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet --upgrade pip
-        sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet -r "$req_file"
+        sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet -r "$AEON_ROOT/requirements.txt"
     fi
 }
 
@@ -664,9 +620,9 @@ run_orchestrator() {
     
     setup_python_venv
     
-    local orchestrator="${REPO_DIR}/${AEON_ORCH_ENGINE_REL_PATH}"
-    local manifest="${REPO_DIR}/${AEON_ORCH_MANIFEST_REL_PATH}"
-    local config="${REPO_DIR}/${AEON_ORCH_CONFIG_REL_PATH}"
+    local orchestrator="${REPO_DIR}/library/orchestrator/engines/python/orchestrator.json.py"
+    local manifest="${REPO_DIR}/manifest/install/manifest.install.json"
+    local config="${REPO_DIR}/manifest/config/python/manifest.config.cursed.json"
     local orch_root="$REPO_DIR"
     
     if [ ! -f "$orchestrator" ]; then
@@ -674,10 +630,11 @@ run_orchestrator() {
         return 1
     fi
     
+#TODO add ${AEON_ORCH_REPO}/
     # Orchestrator works relative to repo path
     if [ "$AEON_ORCH_REL" = 1 ]; then
-        manifest="${AEON_ORCH_MANIFEST_REL_PATH}"
-        config="${AEON_ORCH_CONFIG_REL_PATH}"
+        manifest="manifest/install/manifest.install.json"
+        config="manifest/config/python/manifest.config.cursed.json"
     fi
 
     sudo -u "$AEON_USER" -H AEON_ROOT="${orch_root}" python3 "${orchestrator}" \
@@ -753,9 +710,6 @@ main() {
     setup_sudoers
     
     clone_repo
-
-    # Apply post-clone tunables
-    source_install_env_post_clone
     
     if ! run_orchestrator; then
         log_error "Orchestrator execution failed"
