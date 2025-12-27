@@ -3,11 +3,6 @@
   "version": "2.3.0",
   "description": "AEON System Installation - Security-First Multi-File Config",
   
-  "task_directories": [
-    "library/tasks",
-    "runtime/tasks/custom"
-  ],
-  
   "aeon_state": "runtime/states/install/.aeon_state.json",
   
   "config": [
@@ -55,10 +50,10 @@
     }
   ],
   
-  
   "tasks": [
     {
       "task": "config_handler",
+      "path": "library/python/tasks/utils",
       "description": "Load configuration",
       "depends_on": [],
       "defaults": {
@@ -72,7 +67,8 @@
     },
     {
       "task": "init-install",
-      "description": "Process installation flags",
+      "path": "manifest/orchestrator/python/install/tasks",
+      "description": "Process installation flags (install-specific)",
       "depends_on": ["config_handler"],
       "defaults": {},
       "hooks": {
@@ -82,6 +78,7 @@
     },
     {
       "task": "preflight_check",
+      "path": "manifest/orchestrator/python/install/tasks",
       "description": "Validate system prerequisites",
       "depends_on": ["init-install"],
       "defaults": {
@@ -97,42 +94,49 @@
     },
     {
       "task": "create_user",
+      "path": "library/python/tasks/system",
       "description": "Create system user",
       "depends_on": ["preflight_check"],
       "defaults": {}
     },
     {
       "task": "ip_config",
+      "path": "library/python/tasks/network",
       "description": "Configure IP address",
       "depends_on": ["preflight_check"],
       "defaults": {}
     },
     {
       "task": "dns_config",
+      "path": "library/python/tasks/network",
       "description": "Configure DNS",
       "depends_on": ["preflight_check"],
       "defaults": {}
     },
     {
       "task": "network_ready",
+      "path": "library/python/tasks/network",
       "description": "Verify network configuration",
       "depends_on": ["ip_config", "dns_config"],
       "defaults": {}
     },
     {
       "task": "system_ready",
+      "path": "library/python/tasks/system",
       "description": "System ready check",
       "depends_on": ["network_ready"],
       "defaults": {}
     },
     {
       "task": "system_start",
+      "path": "library/python/tasks/system",
       "description": "Start AEON system",
       "depends_on": ["system_ready"],
       "defaults": {}
     },
     {
       "task": "config_handler",
+      "path": "library/python/tasks/utils",
       "description": "Save final configuration",
       "depends_on": ["system_start"],
       "method": "commit",
@@ -142,5 +146,10 @@
         "on_error": "on_error"
       }
     }
-  ]
+  ],
+  
+  "entry_point": {
+    "task": "system_start",
+    "method": "resolve"
+  }
 }

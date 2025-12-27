@@ -81,8 +81,8 @@ class HierarchicalFutureRegistry:
         :param task_entry: Task configuration from process file
         :return: Fully configured TaskDefinition
         """
-        # Load task module (may be cached)
-        task_def = self.task_loader.load(task_name)
+        # Load task module (may be cached), pass task_entry for path resolution
+        task_def = self.task_loader.load(task_name, task_config=task_entry)
         
         # Override dependencies if specified in process file
         if "depends_on" in task_entry:

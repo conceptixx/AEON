@@ -174,17 +174,9 @@ async def main() -> None:
     
     print()
     
-    # Create task loader with configured directories (resolve relative to aeon_repo)
-    # Note: discovery handles post-install scenario where repo_dir = root_dir
-    task_directories = []
-    for task_dir in process_def.task_directories:
-        if Path(task_dir).is_absolute():
-            task_directories.append(task_dir)
-        else:
-            # Make relative paths absolute by prepending aeon_repo (handles post-install: repo=root)
-            task_directories.append(str(Path(aeon_repo) / task_dir))
-    
-    task_loader = TaskLoader(task_directories)
+    # Create task loader with aeon_repo for per-task path resolution
+    # task_directories is now optional (legacy support only)
+    task_loader = TaskLoader(task_directories=None, aeon_repo=aeon_repo)
     
     # Create main registry/orchestrator with aeon_root for state file resolution
     registry = HierarchicalFutureRegistry(task_loader, process_def, aeon_root=aeon_root)
