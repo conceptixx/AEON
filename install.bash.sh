@@ -12,6 +12,7 @@
 #   - macOS: with Homebrew package manager
 #   - WSL: Windows Subsystem for Linux
 #
+#
 # Version: 1.2.0
 # AEON Version: 6.1.0
 # Requirements: Bash 3.2+, root/sudo privileges, internet connectivity
