@@ -94,9 +94,15 @@ async def main() -> None:
         print(f"  Result: /opt/aeon/tmp/repo ✓")
         sys.exit(1)
     
+    # Resolve process file path (policy: all paths relative to aeon_root)
+    if not Path(process_file).is_absolute():
+        process_file_path = str(Path(aeon_root) / process_file)
+    else:
+        process_file_path = process_file
+    
     # Load process definition (auto-detect format via ParserFactory)
     try:
-        process_def = load_process_definition(process_file)
+        process_def = load_process_definition(process_file_path)
     except FileNotFoundError as e:
         print(f"❌ {e}")
         sys.exit(1)
