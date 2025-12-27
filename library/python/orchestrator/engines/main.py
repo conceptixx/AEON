@@ -174,14 +174,15 @@ async def main() -> None:
     
     print()
     
-    # Create task loader with configured directories (resolve relative to aeon_root)
+    # Create task loader with configured directories (resolve relative to aeon_repo)
+    # Note: discovery handles post-install scenario where repo_dir = root_dir
     task_directories = []
     for task_dir in process_def.task_directories:
         if Path(task_dir).is_absolute():
             task_directories.append(task_dir)
         else:
-            # Make relative paths absolute by prepending aeon_root
-            task_directories.append(str(Path(aeon_root) / task_dir))
+            # Make relative paths absolute by prepending aeon_repo (handles post-install: repo=root)
+            task_directories.append(str(Path(aeon_repo) / task_dir))
     
     task_loader = TaskLoader(task_directories)
     
