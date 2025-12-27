@@ -41,7 +41,7 @@
 #   9. Execute orchestrator with manifest-based installation
 #   10. Finalize and display completion summary
 #
-# File Structure Created:
+# Minimum File Structure Created:
 #   /opt/aeon (Linux/WSL) or /usr/local/aeon (macOS)
 #   ├── library/       - AEON library code
 #   ├── manifest/      - Installation manifests
@@ -88,12 +88,11 @@ AEON_ORCH_REL=1
 # =============================================================================
 
 # Where to write/read the post-clone env file (relative to AEON_ROOT)
-AEON_INSTALL_ENV_REL_PATH="runtime/env/install/install.env"
+AEON_INSTALL_ENV_REL_PATH="runtime/environment/install/install.env"
 
 # Orchestrator paths (relative to cloned repo root)
 AEON_ORCH_ENGINE_REL_PATH="library/orchestrator/engines/python/orchestrator.json.py"
 AEON_ORCH_MANIFEST_REL_PATH="manifest/install/manifest.install.json"
-AEON_ORCH_CONFIG_REL_PATH="manifest/config/python/manifest.config.cursed.json"
 
 # Python venv + requirements (relative to AEON_ROOT / repo)
 AEON_VENV_REL_PATH="venv"
@@ -515,13 +514,6 @@ setup_directories() {
 }
 
 source_install_env_post_clone() {
-log "..."
-log "..."
-log "... ${AEON_ROOT}"
-log "... ${AEON_ROOT}/${AEON_ORCH_REPO}"
-log "... ${AEON_ROOT}/${AEON_ORCH_REPO}/${AEON_INSTALL_ENV_REL_PATH}"
-log "..."
-log "..."
     local env_file="${AEON_ROOT}/${AEON_ORCH_REPO}/${AEON_INSTALL_ENV_REL_PATH}"
 
     if [ ! -f "$env_file" ]; then
@@ -673,7 +665,6 @@ run_orchestrator() {
     
     local orchestrator="${REPO_DIR}/${AEON_ORCH_ENGINE_REL_PATH}"
     local manifest="${REPO_DIR}/${AEON_ORCH_MANIFEST_REL_PATH}"
-    local config="${REPO_DIR}/${AEON_ORCH_CONFIG_REL_PATH}"
     local orch_root="$REPO_DIR"
     
     if [ ! -f "$orchestrator" ]; then
@@ -684,13 +675,13 @@ run_orchestrator() {
     # Orchestrator works relative to repo path
     if [ "$AEON_ORCH_REL" = 1 ]; then
         manifest="${AEON_ORCH_MANIFEST_REL_PATH}"
-        config="${AEON_ORCH_CONFIG_REL_PATH}"
     fi
 
     sudo -u "$AEON_USER" -H AEON_ROOT="${orch_root}" python3 "${orchestrator}" \
         $transfer_flags \
         --file:"${manifest}" \
-        --config:"${config}"
+        --root:"${AEON_ROOT}" \
+        --repo:"${AEON_ORCH_REPO}"
 
     return $?
 }

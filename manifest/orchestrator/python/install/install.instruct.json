@@ -1,0 +1,145 @@
+{
+  "process_name": "install",
+  "version": "2.3.0",
+  "description": "AEON System Installation - Security-First Multi-File Config",
+  
+  "task_directories": [
+    "library/tasks",
+    "runtime/tasks/custom"
+  ],
+  
+  "aeon_state": "runtime/states/install/.aeon_state.json",
+  
+  "config": [
+    {
+      "file": "runtime/configuration/network/config.network.json",
+      "base": "root",
+      "defaults": {
+        "file": "runtime/configuration/defaults/network.defaults.json",
+        "search": ["root", "repo"],
+        "data": {
+          "network.scan_range": "192.168.1.0/24",
+          "network.scan_timeout": 5,
+          "network.ip_address": "192.168.1.100",
+          "network.netmask": "255.255.255.0",
+          "network.gateway": "192.168.1.1"
+        }
+      }
+    },
+    {
+      "file": "runtime/configuration/permissions/config.users.json",
+      "base": "root",
+      "defaults": {
+        "file": "runtime/configuration/defaults/users.defaults.json",
+        "search": ["root", "repo"],
+        "data": {
+          "users.aeon-system.uid": 1001,
+          "users.aeon-system.groups": ["docker", "aeon-admin"],
+          "users.aeon-system.shell": "/bin/bash",
+          "users.aeon-system.create_home": true
+        }
+      }
+    },
+    {
+      "file": "runtime/configuration/system/config.system.json",
+      "base": "root",
+      "defaults": {
+        "file": "runtime/configuration/defaults/system.defaults.json",
+        "search": ["root", "repo"],
+        "data": {
+          "system.version": "2.3.0",
+          "system.python_min": "3.9",
+          "system.disk_min_gb": 10
+        }
+      }
+    }
+  ],
+  
+  "tasks": [
+    {
+      "task": "config_handler",
+      "description": "Load configuration",
+      "depends_on": [],
+      "defaults": {
+        "state_file": "runtime/state/.aeon_state.json"
+      },
+      "hooks": {
+        "on_load": "on_load",
+        "on_force": "on_force"
+      },
+      "force_execute": true
+    },
+    {
+      "task": "init-install",
+      "description": "Process installation flags",
+      "depends_on": ["config_handler"],
+      "defaults": {},
+      "hooks": {
+        "on_load": "process_flags"
+      },
+      "force_execute": true
+    },
+    {
+      "task": "preflight_check",
+      "description": "Validate system prerequisites",
+      "depends_on": ["init-install"],
+      "defaults": {
+        "min_python_version": "3.9",
+        "min_disk_space_gb": 10,
+        "require_docker": true
+      },
+      "hooks": {
+        "on_load": "init_check",
+        "before_resolve": "validate_environment"
+      },
+      "force_execute": true
+    },
+    {
+      "task": "create_user",
+      "description": "Create system user",
+      "depends_on": ["preflight_check"],
+      "defaults": {}
+    },
+    {
+      "task": "ip_config",
+      "description": "Configure IP address",
+      "depends_on": ["preflight_check"],
+      "defaults": {}
+    },
+    {
+      "task": "dns_config",
+      "description": "Configure DNS",
+      "depends_on": ["preflight_check"],
+      "defaults": {}
+    },
+    {
+      "task": "network_ready",
+      "description": "Verify network configuration",
+      "depends_on": ["ip_config", "dns_config"],
+      "defaults": {}
+    },
+    {
+      "task": "system_ready",
+      "description": "System ready check",
+      "depends_on": ["network_ready"],
+      "defaults": {}
+    },
+    {
+      "task": "system_start",
+      "description": "Start AEON system",
+      "depends_on": ["system_ready"],
+      "defaults": {}
+    },
+    {
+      "task": "config_handler",
+      "description": "Save final configuration",
+      "depends_on": ["system_start"],
+      "method": "commit",
+      "hooks": {
+        "before_resolve": "before_resolve",
+        "on_success": "on_success",
+        "on_error": "on_error"
+      }
+    }
+  ]
+}
