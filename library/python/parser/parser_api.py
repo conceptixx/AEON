@@ -95,6 +95,35 @@ class ParserFactory:
     """
     
     _parsers: Dict[str, type] = {}
+    _initialized: bool = False
+    
+    @classmethod
+    def _ensure_initialized(cls):
+        """
+        Stelle sicher, dass Standard-Parser registriert sind.
+        
+        Wird automatisch aufgerufen bei erstem Zugriff.
+        Lazy initialization pattern - verhindert zirkuläre Imports.
+        """
+        if cls._initialized:
+            return
+        
+        cls._initialized = True
+        
+        # Registriere Standard-Parser
+        try:
+            from library.python.parser.json.parser_json import JSONParser
+            cls.register('.json', JSONParser)
+        except ImportError:
+            pass  # JSON Parser optional
+        
+        # Weitere Parser können hier hinzugefügt werden:
+        # try:
+        #     from library.python.parser.yaml.parser_yaml import YAMLParser
+        #     cls.register('.yaml', YAMLParser)
+        #     cls.register('.yml', YAMLParser)
+        # except ImportError:
+        #     pass
     
     @classmethod
     def register(cls, extension: str, parser_class: type):
@@ -115,6 +144,8 @@ class ParserFactory:
         :return: Parser-Instanz
         :raises ValueError: Kein Parser für Extension registriert
         """
+        cls._ensure_initialized()
+        
         ext = Path(file_path).suffix.lower()
         
         if ext not in cls._parsers:

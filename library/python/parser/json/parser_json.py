@@ -74,8 +74,3 @@ class JSONParser(ParserAPI):
             return json.loads(content)
         except json.JSONDecodeError as e:
             raise ParseError(f"Invalid JSON: {e}")
-
-
-# Auto-register beim Import
-from library.python.parser.parser_api import ParserFactory
-ParserFactory.register('.json', JSONParser)
