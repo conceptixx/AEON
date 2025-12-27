@@ -91,8 +91,8 @@ AEON_ORCH_REL=1
 AEON_INSTALL_ENV_REL_PATH="runtime/environment/install/install.env"
 
 # Orchestrator paths (relative to cloned repo root)
-AEON_ORCH_ENGINE_REL_PATH="library/orchestrator/engines/python/orchestrator.json.py"
-AEON_ORCH_MANIFEST_REL_PATH="manifest/install/manifest.install.json"
+AEON_ORCH_ENGINE_REL_PATH="library/python/orchestrator/engines/orchestrator.py"
+AEON_ORCH_MANIFEST_REL_PATH="manifest/orchestrator/python/install/install.instruct.json"
 
 # Python venv + requirements (relative to AEON_ROOT / repo)
 AEON_VENV_REL_PATH="venv"
