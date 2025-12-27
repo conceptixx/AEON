@@ -17,79 +17,86 @@ def discover_aeon_paths(start_dir: Optional[str] = None) -> Tuple[Optional[str],
     """
     Discover AEON root and repository directories by traversing upward from start directory.
     
-    Discovery Algorithm:
-    1. Start from start_dir (or current working directory)
+    Search Algorithm (EXACT ORDER):
+    1. Start from script location (__file__)
     2. Walk upward through parent directories
-    3. Check each directory for AEON markers:
-       - REPO: Has /library subdirectory AND is located in /tmp → found repo_dir
-       - ROOT: Has both /library AND /tmp subdirectories AND is located in /aeon → found root_dir
+    3. Find root_dir: first parent with BOTH /library AND /tmp subdirectories
+    4. From root_dir, search downward:
+       - Check root_dir/tmp for subdirectories
+       - Find repo_dir: first subdir under /tmp that has /library
     
-    Detection Rules:
-    - Repo Dir: ../tmp/repo_dir/library exists → repo_dir = absolute path
-    - Root Dir: ../aeon/tmp AND ../aeon/library exist → root_dir = absolute path to ../aeon
+    Example Walk from /opt/aeon/tmp/repo/library/python/orchestrator/engines/orchestrator.py:
+    - .../engines → no library, no tmp ✗
+    - .../orchestrator → no library, no tmp ✗
+    - .../python → no library, no tmp ✗
+    - .../library → no library, no tmp ✗
+    - .../repo → no library, no tmp ✗
+    - .../tmp → no library, no tmp ✗
+    - .../aeon → HAS library AND tmp ✓ → root_dir = /opt/aeon
     
-    :param start_dir: Starting directory for upward search (defaults to CWD)
+    Then from root_dir (/opt/aeon):
+    - root_dir/tmp → no library ✗
+    - root_dir/tmp/repo → HAS library ✓ → repo_dir = /opt/aeon/tmp/repo
+    
+    :param start_dir: Starting directory for upward search (defaults to this file's location)
     :return: Tuple of (aeon_root, aeon_repo) as absolute paths, or (None, None) if not found
     
     :example:
-        # From /opt/aeon/tmp/repo/library/tasks
+        # Case 1: Standard install (repo under tmp)
+        # From /opt/aeon/tmp/repo/library/python/orchestrator/engines/orchestrator.py
         >>> discover_aeon_paths()
         ('/opt/aeon', '/opt/aeon/tmp/repo')
         
-        # From /usr/local/aeon/tmp/workspace/src
+        # Case 2: Development (root IS repo)
+        # From /Users/name/Desktop/AEON/library/python/orchestrator/engines/discovery.py
         >>> discover_aeon_paths()
-        ('/usr/local/aeon', '/usr/local/aeon/tmp/workspace')
+        ('/Users/name/Desktop/AEON', '/Users/name/Desktop/AEON')
     """
-    # Start from specified directory or current working directory
-    current = Path(start_dir).resolve() if start_dir else Path.cwd().resolve()
+    # STEP 1: Start from script location
+    if start_dir:
+        current = Path(start_dir).resolve()
+    else:
+        current = Path(__file__).resolve().parent
     
     aeon_root = None
     aeon_repo = None
     
-    # Walk upward through directory tree
+    # STEP 2: Walk UPWARD to find root_dir (has BOTH /library AND /tmp)
     for parent in [current] + list(current.parents):
-        # Check if this directory has /library subdirectory
         has_library = (parent / "library").is_dir()
         has_tmp = (parent / "tmp").is_dir()
         
-        # REPO DETECTION: ../tmp/repo_dir/library
-        # If current dir has /library AND parent is named "tmp"
-        if has_library and parent.parent.name == "tmp":
-            aeon_repo = str(parent)
-        
-        # ROOT DETECTION: ../aeon/tmp AND ../aeon/library
-        # If current dir has both /library and /tmp AND parent is named "aeon"
-        if has_library and has_tmp and parent.name == "aeon":
-            aeon_root = str(parent)
-        
-        # Alternative ROOT DETECTION: check if this IS the aeon directory
-        # by having both tmp/ and library/ subdirectories
+        # Found root_dir: has BOTH library AND tmp
         if has_library and has_tmp:
-            # This could be the root if it's named "aeon" or contains both markers
-            # Check if parent path contains "aeon" or this is a likely root
-            if parent.name == "aeon" or (parent / "tmp").is_dir() and (parent / "library").is_dir():
-                aeon_root = str(parent)
-        
-        # If we found both, we can stop searching
-        if aeon_root and aeon_repo:
+            aeon_root = str(parent)
             break
     
-    # Validation: if we found a repo but no root, try to infer root
-    if aeon_repo and not aeon_root:
-        # Repo should be at: /path/to/aeon/tmp/repo_name
-        # So root should be 2 levels up from repo
-        repo_path = Path(aeon_repo)
-        potential_root = repo_path.parent.parent  # Go up from repo_name → tmp → aeon
-        
-        # Verify this is a valid root (has library/ and tmp/)
-        if (potential_root / "library").is_dir() and (potential_root / "tmp").is_dir():
-            aeon_root = str(potential_root)
+    # No root found
+    if not aeon_root:
+        return None, None
     
-    # Validation: if we found a root but no repo, try to use default
-    if aeon_root and not aeon_repo:
-        # Try default location: root/tmp/repo
-        default_repo = Path(aeon_root) / "tmp" / "repo"
-        if default_repo.is_dir():
-            aeon_repo = str(default_repo)
+    # STEP 3: From root_dir, search DOWNWARD in /tmp for repo_dir
+    root_path = Path(aeon_root)
+    tmp_path = root_path / "tmp"
+    
+    # Check if root_dir itself is repo (has library/python/orchestrator)
+    if (root_path / "library" / "python" / "orchestrator").is_dir():
+        # Root IS repo (development mode)
+        aeon_repo = str(root_path)
+    else:
+        # Search in root_dir/tmp/* for subdirectory with /library
+        if tmp_path.is_dir():
+            for subdir in tmp_path.iterdir():
+                if subdir.is_dir():
+                    # Check if this subdir has /library
+                    if (subdir / "library").is_dir():
+                        # Verify it's AEON repo (has orchestrator structure)
+                        if (subdir / "library" / "python" / "orchestrator").is_dir():
+                            aeon_repo = str(subdir)
+                            break
+        
+        # If no repo found under /tmp, root IS repo
+        if not aeon_repo:
+            aeon_repo = str(root_path)
     
     return aeon_root, aeon_repo

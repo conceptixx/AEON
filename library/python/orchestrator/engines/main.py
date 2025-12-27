@@ -94,11 +94,42 @@ async def main() -> None:
         print(f"  Result: /opt/aeon/tmp/repo ✓")
         sys.exit(1)
     
-    # Resolve process file path (policy: all paths relative to aeon_root)
-    if not Path(process_file).is_absolute():
-        process_file_path = str(Path(aeon_root) / process_file)
-    else:
+    # Resolve process file path (search order: repo_dir -> root_dir -> error)
+    process_file_path = None
+    
+    if Path(process_file).is_absolute():
+        # Absolute path provided - use as-is
         process_file_path = process_file
+    else:
+        # Relative path - search in order: repo_dir -> root_dir
+        search_locations = []
+        
+        # Priority 1: repo_dir (if different from root)
+        if aeon_repo != aeon_root:
+            repo_candidate = Path(aeon_repo) / process_file
+            search_locations.append(("repo", str(repo_candidate)))
+        
+        # Priority 2: root_dir (always check)
+        root_candidate = Path(aeon_root) / process_file
+        search_locations.append(("root", str(root_candidate)))
+        
+        # Search in order until found
+        for location_name, candidate_path in search_locations:
+            if Path(candidate_path).is_file():
+                process_file_path = candidate_path
+                break
+    
+    # Validate file was found
+    if not process_file_path or not Path(process_file_path).is_file():
+        print(f"❌ Process file not found: {process_file}")
+        print(f"\nSearched locations:")
+        if not Path(process_file).is_absolute():
+            for location_name, candidate_path in search_locations:
+                exists = "✓" if Path(candidate_path).is_file() else "✗"
+                print(f"   {exists} {location_name}: {candidate_path}")
+        else:
+            print(f"   ✗ {process_file_path}")
+        sys.exit(1)
     
     # Load process definition (auto-detect format via ParserFactory)
     try:
