@@ -7,44 +7,26 @@
   
   "config": [
     {
-      "file": "runtime/configuration/network/config.network.json",
+      "file": "example.config.json",
       "base": "root",
       "defaults": {
-        "file": "runtime/configuration/defaults/network.defaults.json",
+        "file": "example.defaults.json",
         "search": ["root", "repo"],
         "data": {
-          "network.scan_range": "192.168.1.0/24",
-          "network.scan_timeout": 5,
-          "network.ip_address": "192.168.1.100",
-          "network.netmask": "255.255.255.0",
-          "network.gateway": "192.168.1.1"
+          "example.vlaue_1": "2",
+          "example.value_2": 4
         }
       }
     },
     {
-      "file": "runtime/configuration/permissions/config.users.json",
+      "file": "example.segment.json",
       "base": "root",
       "defaults": {
-        "file": "runtime/configuration/defaults/users.defaults.json",
+        "file": "segment.defaults.json",
         "search": ["root", "repo"],
         "data": {
-          "users.aeon-system.uid": 1001,
-          "users.aeon-system.groups": ["docker", "aeon-admin"],
-          "users.aeon-system.shell": "/bin/bash",
-          "users.aeon-system.create_home": true
-        }
-      }
-    },
-    {
-      "file": "runtime/configuration/system/config.system.json",
-      "base": "root",
-      "defaults": {
-        "file": "runtime/configuration/defaults/system.defaults.json",
-        "search": ["root", "repo"],
-        "data": {
-          "system.version": "2.3.0",
-          "system.python_min": "3.9",
-          "system.disk_min_gb": 10
+          "segment.value_1": "8",
+          "segment.value_2": 16
         }
       }
     }
