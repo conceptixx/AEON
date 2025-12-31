@@ -1,4 +1,7 @@
-# NEXUS v2 Enterprise - Use Cases & Deployment Scenarios
+![Banner](.github/assets/aeon_banner_v2_2400x600.png)
+
+# AEON-NEXUS - Universal Daemon v2.0.0 - Enterprise Edition
+#  Use Cases & Deployment Scenarios
 
 ## 🎯 Use Cases by Capability Level
 

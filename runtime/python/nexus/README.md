@@ -1,5 +1,4 @@
-![Banner](.github/assets/banner/aeon_banner_v2_github_1280x640.png)
-# ![Banner](.github/assets/aeon_banner_v2_2400x600.png)
+![Banner](.github/assets/aeon_banner_v2_2400x600.png)
 
 # AEON-NEXUS - Universal Daemon v2.0.0 - Enterprise Edition
 
