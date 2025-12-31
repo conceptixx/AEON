@@ -626,7 +626,26 @@ clone_repo() {
 # Orchestrator reads manifest files and performs installation actions.
 # ORCHESTRATOR EXECUTION
 # =============================================================================
-
+#--- a/install.bash.sh
+#+++ b/install.bash.sh
+#@@ -637,13 +637,17 @@ setup_python_venv() {
+#     
+#     log "Creating Python virtual environment..."
+#     sudo -u "$AEON_USER" python3 -m venv "$venv_path"
+#+
+#+    log "Installing Python dependencies..."
+#+    sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet --upgrade pip
+#     
+#     # Prefer requirements from the cloned repo root (more likely than AEON_ROOT)
+#     local req_file="${REPO_DIR}/${AEON_PY_REQUIREMENTS_REL_PATH}"
+#     if [ -f "$req_file" ]; then
+#-        log "Installing Python dependencies..."
+#-        sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet --upgrade pip
+#         sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet -r "$req_file"
+#     fi
+#+
+#+    # Ensure psutil is installed (used for system metrics/monitoring)
+#+    sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet psutil
 setup_python_venv() {
     local venv_path="${AEON_ROOT}/${AEON_VENV_REL_PATH}"
     
@@ -637,14 +656,20 @@ setup_python_venv() {
     
     log "Creating Python virtual environment..."
     sudo -u "$AEON_USER" python3 -m venv "$venv_path"
+
+    log "Installing Python dependencies..."
+    sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet --upgrade pip
     
     # Prefer requirements from the cloned repo root (more likely than AEON_ROOT)
     local req_file="${REPO_DIR}/${AEON_PY_REQUIREMENTS_REL_PATH}"
     if [ -f "$req_file" ]; then
-        log "Installing Python dependencies..."
-        sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet --upgrade pip
+#        log "Installing Python dependencies..."
+#        sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet --upgrade pip
         sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet -r "$req_file"
     fi
+
+    # Ensure psutil is installed (used for system metrics/monitoring)
+    sudo -u "$AEON_USER" "$venv_path/bin/pip" install --quiet psutil
 }
 
 run_orchestrator() {

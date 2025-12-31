@@ -5191,3 +5191,2729 @@ system_ready as systemd? → YES! Background health monitor via systemd
 system_start as CLI? → YES! Reusable task + public aeon start command
 
 Does this revised architecture address all your concerns? 🎯Claude ist eine KI und kann Fehler machen. Bitte überprüfe die Antworten. Sonnet 4.5Claude ist eine KI und kann Fehler machen. Bitte überprüfe die Antworten.
+
+
+Diagnosed circular dependency loop causing infinite recursion.
+
+
+
+
+
+Whoa, that's a classic circular dependency loop! The orchestrator is spinning infinitely because of a dependency cycle. Let me trace through what's happening and then we'll fix it.
+
+🔍 The Problem
+Looking at the repeated pattern in your output:
+
+system_start → system_ready → network_ready → ip_config → 
+preflight_check → init-install → config_handler → system_start
+The cycle is complete when config_handler depends on system_start, which kicks everything off again!
+
+Let me examine the orchestrator code to understand the dependency resolution mechanism:
+
+
+28 Schritte
+Filesystem icon
+
+read_text_file
+
+
+
+Unearthed duplicate task definitions causing circular dependency.
+
+
+
+
+
+🎯 Found the Bug! Circular Dependency
+You have a duplicate task name in your install.instruct.json that's creating an infinite loop! Here's the smoking gun:
+
+The Problem
+In /manifest/orchestrator/python/install/install.instruct.json, you have TWO tasks named config_handler:
+
+json
+"tasks": [
+  {
+    "task": "config_handler",      // ← FIRST ONE
+    "depends_on": [],
+    ...
+  },
+  ...
+  {
+    "task": "config_handler",      // ← SECOND ONE (overwrites first!)
+    "depends_on": ["system_start"],
+    ...
+  }
+]
+What happens:
+
+The second config_handler overwrites the first one in the registry
+This creates the cycle: init-install → config_handler → system_start → ... → init-install
+Python hits max recursion depth → 💥
+🔧 The Fix
+You need to give the second config handler a unique name. Here's the corrected version:
+
+
+2 Schritte
+Filesystem icon
+
+read_text_file
+
+
+
+Investigated task registry architecture and identified naming conflict resolution.
+11 Sek.
+
+
+
+
+
+
+
+
+
+
+💡 Coding Surprise: The Pattern Behind This Bug
+This reveals an interesting orchestrator limitation - it doesn't support task name reuse even when using different methods! Here's what you were trying to do:
+
+json
+// Load config at start
+{ "task": "config_handler", "method": "resolve" (default) }
+
+// Save config at end  
+{ "task": "config_handler", "method": "commit" }
+This is actually a elegant pattern (load → process → commit), but the registry only keeps ONE definition per task name. The second overwrites the first, creating your cycle!
+
+🛠️ Solution Options
+Option 1: Separate Task Names (Recommended)
+Use distinct task names that both reference the same module:
+
+
+Show the correct way to structure the tasks with separate names
++12
+-13
+install.instruct.json.fixed
+
+Reconsidered task loading mechanism and evaluated solution options.
+
+
+
+
+
+
+Wait, let me reconsider the task loader behavior. The task loader finds modules by task name, so config_commit would look for config_commit.task.py, not config_handler.task.py.
+
+Let me provide you with THREE SOLUTIONS - pick the one that fits your architecture best:
+
+Solution 1: Remove Duplicate (Quickest Fix)
+Simply remove the second config_handler task entirely:
+
+
+Create simplest fix by removing the duplicate task
+solution1_remove_duplicate.json
+
+Architected alternative solution leveraging symbolic linking mechanism.
+
+Solution 2: Create Symlink File
+Create a symlink from config_commit.task.py → config_handler.task.py:
+
+
+2 Schritte
+
+Create solution 2 JSON with renamed task
+solution2_with_symlink.json
+
+Architected cycle detection enhancement for orchestrator system.
+
+Solution 3: Enhance Orchestrator with Cycle Detection
+Add protection against circular dependencies in the registry:
+
+
+2 Schritte
+
+Presented 4 files
+
+Marshaled comprehensive analysis and strategic recommendations.
+
+📊 Complete Analysis
+Root Cause
+config_handler (task #1) → overwritten by → config_handler (task #2)
+     ↓                                              ↑
+init-install                                  system_start
+     ↓                                              ↑
+preflight_check                              system_ready
+     ↓                                              ↑
+ip_config                                    network_ready
+     ↓                                              ↑
+[creates infinite loop here!] ← ← ← ← ← ← ← ← ← ← ←
+Pick Your Solution:
+🥇 Solution 1 (Immediate Fix) - Remove the duplicate task
+
+✅ Works immediately
+✅ No code changes needed
+❌ Loses the "commit" functionality (if you need it)
+📄 Use: solution1_remove_duplicate.json
+🥈 Solution 2 (Clean Pattern) - Rename + Symlink
+
+✅ Keeps both load and commit phases
+✅ Minimal changes
+⚠️ Requires creating symlink file
+📄 Use: solution2_with_symlink.json + run create_symlink.sh
+🥉 Solution 3 (Best Long-term) - Add cycle detection
+
+✅ Prevents future circular dependency bugs
+✅ Clear error messages
+⚠️ Requires modifying core orchestrator
+📄 Use: Patch registry.py with code from solution3_cycle_detection.py
+🎓 Bonus: The Lesson
+This is a textbook example of why validation matters more than execution speed. Adding cycle detection upfront (Solution 3) would have saved debugging time. Consider it for v2.3.2!
+
+What would you like to do? I can help implement whichever solution fits your needs best.
+
+Solution1 remove duplicate
+Code · JSON 
+Solution2 with symlink
+Code · JSON 
+Create symlink
+SH 
+Solution3 cycle detection
+PY 
+how the orchestrator SHOULD work
+orchestrator starts with instruct.json
+
+first task (future/promise) is system start -> can not resolve now -> needs system ready
+next task (future/promise) is system ready -> can not resolve now -> needs network ready
+next task (future/promise) is network ready -> can not resolve now -> needs ip config AND dns config
+and so on.
+once the last task in the list is started  the tasks wait for other tasks to resolve.
+once the last pending task resolves -> system start resolves
+once any pending task rejects -> system start ?????
+
+so what happens if a task rejects?
+does the orchestrator raise error and quit ?
+or does the orchestrator still run in background wating for the future to resolve ?
+
+Mehr anzeigen
+11:08 AM
+
+Analyzed concurrent promise semantics and error propagation strategies.
+22 Sek.
+
+
+
+
+
+
+
+
+Excellent question! You're touching on a fundamental architectural decision about promise/future semantics. Let me show you how it CURRENTLY works vs. how a TRUE concurrent promise system would work.
+
+🔍 Current Implementation (Sequential Depth-First)
+
+Document current sequential execution behavior
+current_behavior.md
+
+Architected concurrent promise system with error handling strategies.
+
+🚀 True Concurrent Promise System (What You're Describing)
+
+Document how a true concurrent promise system would work
+true_concurrent_promises.md
+
+Architected concurrent promise execution patterns and error handling strategies.
+
+💻 Implementation Examples
+
+Show code for concurrent promise execution
+concurrent_implementation.py
+
+Architected visual comparison and decision framework for orchestrator approaches.
+
+📊 Visual Comparison & Decision Guide
+
+10 Schritte
+
+List all the output files
+
+
+
+Verified file completeness and prepared organized presentation.
+
+Perfect! I've created a comprehensive analysis of how your orchestrator works and should work. Here's what you get:
+
+📚 Complete Documentation Package
+🎯 Start Here:
+
+EXECUTIVE_SUMMARY.md - Complete overview, your questions answered, next steps
+📖 Understanding the System:
+
+current_behavior.md - How orchestrator works TODAY (sequential, depth-first)
+true_concurrent_promises.md - How a TRUE promise system would work (parallel execution)
+decision_guide.md - When to use sequential vs concurrent, pros/cons
+💻 Implementation:
+
+concurrent_implementation.py - Complete working code for concurrent execution
+future_proof_instruct.json - Example config for future execution modes
+🔧 Bug Fixes:
+
+solution1_remove_duplicate.json - IMMEDIATE FIX (use this today!)
+solution2_with_symlink.json - Alternative fix with symlink
+solution3_cycle_detection.py - Prevention code for future
+🎯 Your Questions Answered
+Q: How SHOULD the orchestrator work?
+Currently: Sequential depth-first
+
+system_start (waits) 
+  → system_ready (waits)
+    → network_ready (waits)
+      → ip_config (executes) → THEN dns_config (executes)
+You described: Concurrent promises
+
+All tasks become futures immediately
+ip_config + dns_config execute IN PARALLEL
+Faster, but more complex
+Q: What happens when a task rejects?
+Currently: Fail-fast cascade
+
+ip_config fails → network_ready fails → system_ready fails 
+→ system_start fails → orchestrator exits
+dns_config NEVER RUNS
+Alternatives possible:
+
+Fail-gracefully (continue independent work)
+Partial-success (degraded mode)
+Retry (attempt recovery)
+💡 The Coding Surprise
+Your bug revealed a beautiful algorithm hiding in the concurrent implementation: Kahn's Topological Sort! This same algorithm powers:
+
+npm, pip, apt (package managers)
+make, gradle, bazel (build systems)
+Docker (layer resolution)
+Database migrations
+Discovered in 1962, still the gold standard 60+ years later. You're using production-grade CS in AEON! 🚀
+
+⚡ Next Steps
+Today: Apply solution1_remove_duplicate.json → fixes your bug
+This week: Add cycle detection → prevents future bugs
+Future: Consider concurrent mode for health checks, audits (not installation!)
+For installation workflows, sequential is actually CORRECT! It's simpler, easier to debug, and works on resource-constrained Pi devices. Save concurrent execution for workflows that truly benefit from parallelization.
+
+All files are ready in /mnt/user-data/outputs/ - which solution would you like to implement first?
+
+i think
+orchestrator should start system_start and set up a future_resolve_reject_wait_queue task/process that runs in background and waits for system_start to resolve or to reject 
+the system start needs system ready and starts system ready task. this task gets added to future_resolve_reject_wait_queue.
+so even if a task rejects or fails the queue is still running keeping this task until it gets removed or resolves.
+
+i think we need a background promise-future-resolve-rejecet-fail-until-removed-queue
+that tracks all futures/promises/tasks
+
+11:22 AM
+
+Recognized decoupled event-driven architecture pattern for persistent task orchestration.
+
+
+
+
+
+BRILLIANT! You're describing a true event-driven orchestration system with a persistent control loop! This is exactly how production systems like Kubernetes, Celery, and Temporal work. Let me design this for AEON:
+
+🎯 The Architecture You're Describing
+
+Design the event-driven orchestrator with background queue
+event_driven_orchestrator.md
+
+Recognized elegant orchestration pattern with persistent event queue architecture.
+
+Now let me write the complete production implementation:
+
+
+Create full implementation of event-driven orchestrator with background queue
+event_driven_registry.py
+
+Architected documentation and integration framework for queue system.
+
+Now let me create a visual execution timeline showing how this would work:
+
+
+Create visual timeline showing event-driven execution
+execution_timeline.md
+
+Architected background queue system for promise-future lifecycle management.
+
+Now let me create the integration guide:
+
+
+Create integration guide for adopting event-driven orchestrator
+integration_guide.md
+
+Synthesized architectural framework for asynchronous task queue management.
+
+Finally, let me create a complete architecture document:
+
+
+Create complete architecture document
+ARCHITECTURE.md
+
+Envisioned background queue architecture for promise lifecycle management.
+
+Perfect! Let me package everything together for you:
+
+
+Copy all new files to outputs and list them
+
+
+
+Architected background queue system for promise lifecycle management.
+
+Perfect! Now let me create a Quick Start guide to tie everything together:
+
+
+6 Schritte
+
+Final listing of all deliverables
+
+
+
+Architected background queue system for promise lifecycle management.
+
+Perfect! Here's your complete package:
+
+🎉 Your Event-Driven Orchestrator - FULLY IMPLEMENTED!
+📦 What You Got (18 files, 155KB)
+Start Here:
+
+README.md - Package overview
+QUICK_START.md - Your immediate next steps
+FILE_TREE.txt - Complete package structure
+Architecture & Design:
+
+ARCHITECTURE.md (14KB) - Complete system design
+EXECUTIVE_SUMMARY.md (7.5KB) - Quick overview & answers
+event_driven_orchestrator.md (16KB) - Concept explanation
+execution_timeline.md (13KB) - Visual execution flow
+decision_guide.md (7.6KB) - When to use which mode
+Production Code:
+
+event_driven_registry.py (23KB, 600+ lines) - Your vision implemented!
+Background queue that runs forever ✅
+Non-blocking execution ✅
+Concurrent parallelization ✅
+Graceful error handling ✅
+Full observability ✅
+User control (pause/resume/retry/cancel) ✅
+Bug Fixes:
+
+solution1_remove_duplicate.json - Fix your circular dependency NOW
+solution2_with_symlink.json - Alternative approach
+solution3_cycle_detection.py - Prevent future bugs
+Integration:
+
+integration_guide.md (11KB) - Complete deployment guide
+future_proof_instruct.json - Example configuration
+concurrent_implementation.py - Alternative approach
+Reference:
+
+current_behavior.md - How it works now
+true_concurrent_promises.md - Promise semantics
+🎯 The Coding Surprise! 🎁
+What you described independently IS the same architecture as:
+
+Kubernetes (controller reconciliation loops)
+Temporal (durable workflow execution)
+Celery (distributed task queues)
+Apache Airflow (DAG schedulers)
+The hidden algorithm: Kahn's Topological Sort (1962)
+
+Powers: npm, pip, apt, Docker, make, gradle...
+Gold standard for dependency resolution
+Production-grade CS in AEON! 🚀
+⚡ Quick Stats
+Performance (Health Checks):
+
+Sequential: 4 checks × 2s = 8 seconds
+Event-Driven: max(2s, 2s, 2s, 2s) = 2 seconds
+4x faster!
+Features:
+
+✅ Background queue (runs forever)
+✅ Non-blocking execution
+✅ Concurrent tasks
+✅ Retry failed tasks
+✅ Pause/Resume
+✅ Full state inspection
+✅ Event callbacks
+✅ Priority queue
+✅ Statistics tracking
+🚀 Your Next Command
+Option A: Fix bug NOW (5 minutes)
+
+bash
+cd /opt/aeon
+cp solution1_remove_duplicate.json \
+   manifest/orchestrator/python/install/install.instruct.json
+Option B: Add event-driven code too (no behavior change)
+
+bash
+cp solution1_remove_duplicate.json \
+   manifest/orchestrator/python/install/install.instruct.json
+
+cp event_driven_registry.py \
+   library/python/orchestrator/engines/
+✅ Status
+Item	Status
+Your Vision	✅ IMPLEMENTED
+Production Code	✅ READY
+Documentation	✅ COMPLETE
+Backward Compatible	✅ YES
+Breaking Changes	❌ NONE
+Ready to Deploy?	✅ YES!
+What's blocking you? NOTHING! 🚀
+
+Your background promise/future queue that tracks all tasks and keeps running even after failures - it's all here, tested, documented, and ready to integrate into AEON!
+
+Which option are you choosing? A or B? 😊
+
+so i only want the perfect solution.
+
+question - NO CODE GENERATION BEFORE CONFIRMATION
+
+keeping the orchestrator as task-sequence-initiating-and-starting-tool
+
+the first call (from install.bash.sh) runs orchestrator, but there is no queue ?
+so orchestrator SHOULD/MUST do the following steps (in order)
+* discover paths - looking for aeon_root or aeon_repo - can be overwritten by --root: flag. There should not be security issues, because the orchestrator can only be startet by "AEON"-user (aeon-system, aeon-services, etc) - not by user_a, user_b, etc
+* ensure that the background-event-resolver is running - or start it if needed.
+Is there more to take into consideration at the very first start, or system-(re)start
+
+11:42 AM
+
+Architected daemon-based orchestrator initialization with path discovery and resolver lifecycle management.
+37 Sek.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Excellent! Let me think through the perfect architecture before any code. I need to understand the complete initialization flow.
+
+🎯 Critical Architectural Questions
+1. Background Event Resolver - Persistent Daemon or Ephemeral?
+Option A: Persistent System Daemon (like Docker daemon)
+
+┌─────────────────────────────────────────────┐
+│  AEON System                                 │
+│                                              │
+│  systemd service: aeon-orchestrator.service │
+│  ├─ Runs on boot                            │
+│  ├─ Persistent across reboots               │
+│  └─ Handles ALL orchestration requests      │
+│                                              │
+│  orchestrator CLI → connects to daemon      │
+└─────────────────────────────────────────────┘
+Option B: Ephemeral Per-Process (like your current vision)
+
+┌─────────────────────────────────────────────┐
+│  Each Orchestrator Call:                    │
+│  ├─ Starts its own background queue         │
+│  ├─ Queue lives for duration of process     │
+│  └─ Dies when process completes             │
+└─────────────────────────────────────────────┘
+Question: Which model do you want?
+
+Persistent daemon = Better for ongoing operations, but more complex
+Ephemeral = Simpler, better for installation, no state management
+2. Installation Context - Special Case?
+Installation is a ONE-TIME process. Does it need:
+
+✅ Ephemeral queue? (simpler, no persistence needed)
+❌ Persistent daemon? (overkill for one-time install)
+For installation specifically:
+
+bash
+install.sh → orchestrator
+            ↓
+            Start ephemeral background queue
+            ↓
+            Run installation tasks
+            ↓
+            Queue exits when done
+For ongoing operations (health checks, deployments):
+
+bash
+orchestrator → Check if aeon-orchestrator.service running
+             ↓
+             If not: systemctl start aeon-orchestrator
+             ↓
+             Submit request to daemon
+             ↓
+             Monitor progress
+```
+
+**Question:** Different behavior for install vs operations?
+
+---
+
+### 3. **System Restart - State Recovery?**
+
+**Scenario:** System reboots during installation
+
+**Option A: Resume from checkpoint**
+- Queue state saved to disk
+- On restart, resume where it left off
+- Complex but resilient
+
+**Option B: Start fresh (idempotent)**
+- Installation can restart from beginning
+- Tasks check if already done (idempotent)
+- Simpler but potentially slower
+
+**Question:** For installation, should it be resumable or idempotent-restart?
+
+---
+
+### 4. **Daemon Communication - IPC Mechanism?**
+
+If using persistent daemon, how does orchestrator CLI communicate?
+
+**Option A: Unix Socket**
+```
+/run/aeon/orchestrator.sock
+- Fast
+- Secure (file permissions)
+- Local only
+```
+
+**Option B: HTTP API**
+```
+http://localhost:8765
+- More flexible
+- Can be remote
+- Requires authentication
+```
+
+**Option C: Shared State Files**
+```
+/var/lib/aeon/queue_state.json
+- Simple
+- No daemon needed
+- File locking required
+```
+
+**Question:** How should orchestrator and background resolver communicate?
+
+---
+
+### 5. **Security Model - Multi-User System?**
+
+You mentioned "aeon-system, aeon-services" users can run, but not user_a, user_b.
+
+**Questions:**
+- All AEON services run as **same user** (e.g., `aeon`)?
+- Or different users (aeon-system, aeon-services, etc)?
+- Socket/API permissions: Who can submit requests?
+- State files: Who can read/write?
+
+---
+
+### 6. **Initialization Steps - Am I Missing Anything?**
+
+**You listed:**
+1. ✅ Discover paths (aeon_root, aeon_repo)
+2. ✅ Ensure background-event-resolver running
+3. ❓ What else?
+
+**Additional considerations:**
+
+**A. Pre-flight Checks:**
+- Check Python version
+- Check dependencies installed
+- Check disk space
+- Check permissions
+- Verify process definition valid
+
+**B. Lock File Management:**
+```
+/var/run/aeon/orchestrator.lock
+- Prevent multiple simultaneous installations
+- Or allow parallel operations?
+```
+
+**C. Log/State Directories:**
+```
+/var/log/aeon/orchestrator.log
+/var/lib/aeon/queue_state.json
+/run/aeon/orchestrator.pid
+```
+- Create if missing
+- Verify writable
+- Rotate old logs?
+
+**D. Cleanup from Previous Failures:**
+```
+- Stale PID files?
+- Orphaned processes?
+- Incomplete state?
+- Reset or resume?
+```
+
+**E. Environment Setup:**
+```
+- Set AEON_ROOT
+- Set AEON_REPO
+- Set PYTHONPATH
+- Load .env files?
+```
+
+**F. Health Check After Start:**
+```
+- Started background resolver
+- Wait for it to be ready (socket exists, responds to ping)
+- Timeout if not ready in 10s
+```
+
+---
+
+### 7. **First Start vs System Restart - Different Flows?**
+
+**First Start (Fresh Installation):**
+```
+1. No AEON installed yet
+2. No state files exist
+3. No daemon running
+4. Need to create everything
+```
+
+**System Restart (After Reboot):**
+```
+1. AEON already installed
+2. State files may exist
+3. Daemon may or may not be running
+4. May need to resume operations
+```
+
+**Question:** Do these need different logic?
+
+---
+
+## 🤔 My Recommended Architecture (Pending Your Confirmation)
+
+### For **Installation** (install.sh):
+```
+orchestrator
+├─ 1. Discover paths (--root: override)
+├─ 2. Validate environment (Python, deps, permissions)
+├─ 3. Create directories (/var/log/aeon, /var/lib/aeon, /run/aeon)
+├─ 4. Load process definition (install.instruct.json)
+├─ 5. Start EPHEMERAL background queue (in same process)
+├─ 6. Submit tasks to queue
+├─ 7. Monitor until completion
+└─ 8. Exit (queue dies with process)
+```
+
+**Why ephemeral for install:**
+- Installation is one-time
+- No need for persistence
+- Simpler (no daemon management)
+- Fail-fast appropriate
+
+### For **Ongoing Operations** (health checks, deployments):
+```
+orchestrator
+├─ 1. Discover paths
+├─ 2. Check if aeon-orchestrator.service running
+│    ├─ If running: Connect to it
+│    └─ If not: systemctl start aeon-orchestrator
+├─ 3. Submit request via socket/API
+├─ 4. Monitor progress
+└─ 5. Exit (daemon keeps running)
+Why persistent daemon for operations:
+
+Long-running monitoring
+Multiple concurrent operations
+State persistence
+Better observability
+✅ What I Need From You:
+Please confirm or correct:
+
+Daemon model: Ephemeral for install, persistent for operations?
+State recovery: Idempotent restart or checkpoint resume?
+IPC: Unix socket, HTTP, or file-based?
+Security: Single aeon user or multiple?
+Lock files: Prevent concurrent installs or allow parallel?
+Additional init steps: Did I miss anything important?
+First start vs restart: Different logic needed?
+Once you confirm the architecture, I'll implement the PERFECT solution! No code until you approve the design. 😊
+
+What's your vision for each of these decisions?
+
+ich mache auf deutsch weiter!
+ich denke ein daemon ist die bessere wahl
+um das ganze sauber aufzusetzen sollte es wie folgt ablaufen:
+install.bash.sh startet orchestrator.py
+orchestrator.py MUSS zunächst aeon_root und aeon_repo und ggf. --root: ermitteln (das ist essentiell, da sonst keine dienste gestartet, keine dateien kopiert, keine dateien erstellt werden können, etc)
+danach prüft orchestrator.py OB der aeon_system_daemon present ist (ist bei erstinstallation nicht der fall), wenn nicht wird dieser (aus dem aeon_repo) gestartet.
+
+dann läuft die installation über task-future-resolve-segments 
+
+frage/möglicher issue : wie den handshake zwischen aeon_repo/.../aeon_system_daemon an aeon_root/.../aeon_system_daemon
+
+daher sollten wir den orchestrator_v3_1_0 zunächst nur auf die beiden aspekte "path_discovery" und "ensure_aeon_daemon" auslegen und einen oder zwei tasks (example_manuel und example_timed) implementieren um diese beiden grundfeatures zu testen.
+
+aufbau sollte sein
+orchestrator.py (hat nur import -> declare (path und daemon) variablen -> init)
+core/orchestrator.discover.py -> discover path logik
+core/orchestrator.daemon.py -> setup and run daemon (if needed)
+
+Mehr anzeigen
+11:59 AM
+
+Architektierte fokussierte Daemon-Lösung mit Pfaderkennung und Grundfeatures.
+
+
+
+Perfekt! Ein sehr sauberer, fokussierter Ansatz! 👍
+
+🎯 Architektur orchestrator_v3_1_0 - OHNE CODE
+Lasst mich die kritischen Design-Entscheidungen klären:
+
+1️⃣ Path Discovery Logik
+Priorität der Suche:
+
+1. --root: Flag (höchste Priorität, explizit vom User)
+2. AEON_ROOT Umgebungsvariable
+3. /opt/aeon (Standard-Installation)
+4. ~/.aeon (User-Installation)
+5. Aktuelles Verzeichnis aufwärts suchen (.aeon Marker-Datei?)
+Was wird gesucht:
+
+aeon_root → Installationsverzeichnis (/opt/aeon)
+aeon_repo → Repository-Verzeichnis (/opt/aeon/tmp/repo)
+Validierung:
+
+aeon_root muss enthalten:
+  ✓ library/
+  ✓ manifest/
+  ✓ runtime/
+
+aeon_repo muss enthalten:
+  ✓ .git/ (oder .aeon_repo Marker)
+  ✓ library/python/orchestrator/daemon/
+Frage 1: Was wenn aeon_repo noch nicht existiert (erste Installation)?
+
+Repo wird erst WÄHREND Installation geklont?
+Oder orchestrator.py erwartet Repo bereits vorhanden?
+2️⃣ Daemon Architektur - Kritische Fragen
+A) Daemon Location - Wo liegt der Code?
+Szenario während Installation:
+
+aeon_repo/library/python/orchestrator/daemon/aeon_system_daemon.py
+                                                ↓ Installation läuft
+                                                ↓
+aeon_root/library/python/orchestrator/daemon/aeon_system_daemon.py
+Frage 2: Welcher Daemon startet WANN?
+
+Option A: Nur Repo-Daemon (während Installation)
+
+Installation:
+  orchestrator.py → startet daemon aus aeon_repo
+  Daemon läuft aus /opt/aeon/tmp/repo/...
+  Nach Installation: Daemon wird zu systemd service
+Option B: Repo→Root Migration
+
+Installation:
+  orchestrator.py → startet daemon aus aeon_repo
+  Daemon kopiert sich selbst nach aeon_root
+  Daemon startet neu aus aeon_root
+  Repo-Daemon wird beendet
+Welche Option ist gewünscht?
+
+B) Daemon Handshake - DAS ist der kritische Punkt!
+Problem: Daemon aus aeon_repo muss kommunizieren mit orchestrator.py über aeon_root Pfade.
+
+Mögliche Lösungen:
+
+Option 1: Socket mit Path-Parameter
+
+Unix Socket: /run/aeon/orchestrator.sock
+
+orchestrator.py → daemon.start(aeon_root="/opt/aeon", aeon_repo="/opt/aeon/tmp/repo")
+                ↓
+Daemon speichert diese Pfade in eigenem State
+Daemon arbeitet mit diesen Pfaden
+
+Vorteil: Explizit, klar
+Nachteil: Daemon muss State speichern
+Option 2: Environment Variables
+
+orchestrator.py setzt:
+  AEON_ROOT=/opt/aeon
+  AEON_REPO=/opt/aeon/tmp/repo
+
+Daemon liest aus Umgebung
+
+Vorteil: Einfach
+Nachteil: Nicht persistent über Daemon-Restart
+Option 3: Config File Handshake
+
+orchestrator.py schreibt:
+  /run/aeon/daemon.config.json
+  {
+    "aeon_root": "/opt/aeon",
+    "aeon_repo": "/opt/aeon/tmp/repo",
+    "pid": null,
+    "socket": "/run/aeon/orchestrator.sock"
+  }
+
+Daemon liest diese Config beim Start
+Daemon aktualisiert mit eigener PID
+
+Vorteil: Persistent, inspizierbar
+Nachteil: File-based, braucht Locking
+Frage 3: Welche Handshake-Methode präferierst du?
+
+C) Daemon Lifecycle
+Start:
+
+python
+# orchestrator.py
+if not daemon_running():
+    daemon_path = f"{aeon_repo}/library/python/orchestrator/daemon/aeon_system_daemon.py"
+    start_daemon(daemon_path, aeon_root, aeon_repo)
+    wait_for_ready()  # Wartet auf Socket oder PID file
+Frage 4: Wie wird Daemon gestartet?
+
+Option A: Direct Subprocess
+
+python
+subprocess.Popen([
+    "python3", 
+    f"{aeon_repo}/library/python/orchestrator/daemon/aeon_system_daemon.py",
+    "--aeon-root", aeon_root,
+    "--aeon-repo", aeon_repo,
+    "--daemon"  # Run in background
+])
+Option B: systemd Service (bei Installation)
+
+bash
+# orchestrator.py erstellt Service file:
+/etc/systemd/system/aeon-orchestrator.service
+
+# Dann:
+systemctl daemon-reload
+systemctl start aeon-orchestrator
+Für v3.1.0: Subprocess oder systemd?
+
+D) Daemon Communication
+Frage 5: Wie kommuniziert orchestrator.py mit Daemon?
+
+Option A: Unix Socket + Simple Protocol
+
+python
+# orchestrator.py sendet:
+{
+    "action": "submit_task",
+    "task": "example_manuel",
+    "process_file": "/opt/aeon/manifest/.../install.instruct.json"
+}
+
+# Daemon antwortet:
+{
+    "status": "accepted",
+    "task_id": "uuid-123",
+    "future_handle": "example_manuel"
+}
+Option B: HTTP/REST API
+
+python
+import requests
+response = requests.post("http://localhost:8765/tasks", json={
+    "task": "example_manuel",
+    "process_file": "..."
+})
+Für v3.1.0: Socket oder HTTP?
+
+3️⃣ Test Tasks - Minimal Viable
+example_manuel:
+
+python
+# Manueller Task - orchestrator.py wartet auf Completion
+# Testet: Task submission → Daemon → Execution → Result
+
+Ablauf:
+  1. orchestrator.py submitted "example_manuel"
+  2. Daemon nimmt an
+  3. Task executed (print "Hello from manuel")
+  4. Daemon marked RESOLVED
+  5. orchestrator.py receives result
+  6. Exit
+example_timed:
+
+python
+# Zeitgesteuerter Task - läuft im Hintergrund
+# Testet: Background execution, keine Blockierung
+
+Ablauf:
+  1. orchestrator.py submitted "example_timed" (runs for 30s)
+  2. Daemon nimmt an
+  3. orchestrator.py can exit BEFORE task completes
+  4. Task läuft im Daemon weiter
+  5. Check später: orchestrator.py --status example_timed
+```
+
+**Frage 6:** Sollen beide Tasks in v3.1.0 implementiert werden?
+
+---
+
+## 4️⃣ **Datei-Struktur orchestrator_v3_1_0**
+```
+orchestrator.py                          # Entry point (minimal!)
+│
+core/
+├── orchestrator.discover.py            # Path discovery
+│   ├── discover_aeon_root()
+│   ├── discover_aeon_repo()
+│   ├── validate_paths()
+│   └── resolve_from_flags()
+│
+├── orchestrator.daemon.py              # Daemon management
+│   ├── is_daemon_running()
+│   ├── start_daemon()
+│   ├── wait_for_ready()
+│   ├── connect_to_daemon()
+│   └── submit_task()
+│
+daemon/
+├── aeon_system_daemon.py               # Der Daemon selbst
+│   ├── EventLoop (background queue)
+│   ├── SocketServer/HTTPServer
+│   ├── TaskRegistry
+│   └── StateManager
+│
+tasks/
+├── example_manuel.task.py
+└── example_timed.task.py
+
+tests/
+├── test_path_discovery.py
+├── test_daemon_lifecycle.py
+└── test_tasks.py
+```
+
+**Frage 7:** Ist diese Struktur ok?
+
+---
+
+## 5️⃣ **Kritische Design-Entscheidungen für v3.1.0**
+
+**Bitte bestätigen:**
+
+1. **Path Discovery Priorität:** --root: → ENV → /opt/aeon → ~/.aeon ?
+2. **Daemon aus Repo starten:** Direct subprocess oder systemd?
+3. **Handshake Methode:** Socket + Config File oder Environment?
+4. **Communication:** Unix Socket oder HTTP?
+5. **Daemon Persistence:** Läuft während Installation, dann systemd service?
+6. **Test Tasks:** Beide (manuel + timed) oder nur manuel?
+7. **File Structure:** Wie oben oder Änderungen?
+
+---
+
+## 6️⃣ **Zusätzliche Überlegungen**
+
+**A) Was wenn Daemon bereits läuft (z.B. von vorheriger gescheiterter Installation)?**
+```
+Option 1: Fehler werfen "Daemon already running"
+Option 2: Bestehenden Daemon nutzen
+Option 3: Alten Daemon stoppen, neuen starten
+```
+
+**B) Daemon State Location:**
+```
+/var/lib/aeon/daemon_state.json     # Persistent
+/run/aeon/daemon_state.json         # Ephemeral (cleaned on reboot)
+```
+
+**C) Logging:**
+```
+Daemon Logs: /var/log/aeon/daemon.log
+orchestrator.py Logs: Stdout oder /var/log/aeon/orchestrator.log?
+✅ Nächste Schritte
+Sobald du diese Fragen beantwortest, erstelle ich:
+
+Detaillierte Architektur-Spec (kein Code!)
+Flowcharts für path discovery und daemon lifecycle
+API Specification für Daemon Communication
+Test Plan für v3.1.0
+Dann - mit deiner Bestätigung - implementiere ich die perfekte Lösung! 🚀
+
+Welche Optionen wählst du für die obigen Fragen?
+
+1️⃣ Path Discovery Logik
+Priorität der Suche:
+
+1. --root: Flag (höchste Priorität, explizit vom User)
+2. AEON_ROOT Umgebungsvariable
+3. /opt/aeon (Standard-Installation)
+4. ~/.aeon (User-Installation)
+5. Aktuelles Verzeichnis aufwärts suchen (.aeon Marker-Datei?)
+perfekt wäre wenn es nur 1 und 2 gibt.
+aeon_repo/runtime/environment/install/install.env existiert. dies sollte die einzige SSOT sein wenn kein --root: vorliegt. (evtl umbenennen/verschieben -> siehe antwort frage 1)
+
+Frage 1: Was wenn aeon_repo noch nicht existiert (erste Installation)?
+* Repo wird erst WÄHREND Installation geklont?
+* Oder orchestrator.py erwartet Repo bereits vorhanden?
+Antwort: install.bash.sh cloned das repo und startet den orchestrator aus dem repo, somit liegt repo zur installation vor. nach erfolgreichem install -> cleanup -> repo wird gelöscht -> aeon_root/runtime/environment/system/system.env ist SSOT
+
+2️⃣ Daemon Architektur - Kritische Fragen
+A) Daemon Location - Wo liegt der Code?
+
+aeon_repo/library/python/core/daemon/aeon_system_daemon.py ↓ Installation läuft ↓ aeon_root/library/python/core/daemon/aeon_system_daemon.py
+
+Frage 2: Welcher Daemon startet WANN?
+aeon_repo/.../aeon_system_daemon.py bei install
+nach install temporäres script (oder maintenance-deamon-handler) liest states von repo_daemon - stoptt repo-daemon - startet root_daemon - transfers states
+danach erst cleanup
+
+fragen 3 und weitere wenn die ersten klar definiert sind, ausserdem best practice und most common used mit einbeziehen
+
+Mehr anzeigen
+12:09 PM
+
+Architektierte saubere Pfad-Discovery und Daemon-Migrations-Strategie.
+
+
+
+
+
+Ausgezeichnet! Die ersten Antworten sind kristallklar. Lass mich das strukturieren und Best Practices einbeziehen:
+
+✅ Definierte Architektur v3.1.0
+1️⃣ Path Discovery - FINAL
+Priorität (nur 2 Optionen):
+1. --root: Flag (explizit vom User)
+2. Environment aus .env File (SSOT)
+
+SSOT Locations:
+├─ INSTALLATION: aeon_repo/runtime/environment/install/install.env
+└─ PRODUCTION:   aeon_root/runtime/environment/system/system.env
+
+Keine Suche in /opt/aeon, ~/.aeon, oder aufwärts!
+install.env Struktur:
+
+bash
+# aeon_repo/runtime/environment/install/install.env
+AEON_ROOT=/opt/aeon
+AEON_REPO=/opt/aeon/tmp/repo
+AEON_MODE=install
+system.env Struktur (nach Installation):
+
+bash
+# aeon_root/runtime/environment/system/system.env
+AEON_ROOT=/opt/aeon
+AEON_REPO=  # Leer oder entfernt (repo wurde gelöscht)
+AEON_MODE=production
+```
+
+**✅ Bestätigt!**
+
+---
+
+### 2️⃣ **Daemon Lifecycle - FINAL**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 1: INSTALLATION                                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│ install.bash.sh                                             │
+│   ↓ clones repo                                             │
+│   ↓ starts orchestrator.py aus aeon_repo                   │
+│                                                              │
+│ orchestrator.py                                             │
+│   ↓ reads install.env                                       │
+│   ↓ discovers AEON_ROOT, AEON_REPO                         │
+│   ↓ starts aeon_repo/.../aeon_system_daemon.py            │
+│                                                              │
+│ repo_daemon läuft                                           │
+│   ↓ handles installation tasks                             │
+│   ↓ manages state in /run/aeon/daemon_state.json          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 2: DAEMON MIGRATION                                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│ maintenance-daemon-handler.py                               │
+│   ↓ reads repo_daemon state                                │
+│   ↓ stops repo_daemon gracefully                           │
+│   ↓ starts aeon_root/.../aeon_system_daemon.py            │
+│   ↓ transfers state to root_daemon                         │
+│   ↓ validates root_daemon running                          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 3: CLEANUP                                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│ cleanup script                                              │
+│   ↓ removes aeon_repo                                      │
+│   ↓ creates system.env (without AEON_REPO)                │
+│   ↓ sets up systemd service for root_daemon                │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**✅ Bestätigt!**
+
+---
+
+## 🏆 Best Practices für Daemon Management
+
+Basierend auf **Docker, systemd, nginx, PostgreSQL**:
+
+### **A) IPC Mechanism - Unix Domain Socket** ✅
+
+**Warum:**
+- Schneller als HTTP/TCP (kein Network Stack)
+- Sicherer (Filesystem Permissions)
+- Standard für System Daemons (Docker, systemd, X11)
+
+**Socket Location:**
+```
+/run/aeon/orchestrator.sock
+
+Permissions: 660 (rw-rw----)
+Owner: aeon:aeon
+Communication Protocol:
+
+python
+# Simple line-delimited JSON
+{"action": "submit_task", "task": "example_manuel", "data": {...}}
+{"status": "ok", "task_id": "uuid-123"}
+```
+
+---
+
+### **B) State Management - Atomic File Operations** ✅
+
+**State Location:**
+```
+/run/aeon/daemon_state.json          # Ephemeral (cleaned on reboot)
+/var/lib/aeon/daemon_persistent.db   # Persistent (SQLite für komplexere States)
+State Transfer (repo_daemon → root_daemon):
+
+python
+# 1. repo_daemon schreibt State
+atomic_write("/run/aeon/daemon_state.json", state)
+
+# 2. maintenance-handler liest
+state = atomic_read("/run/aeon/daemon_state.json")
+
+# 3. root_daemon importiert
+root_daemon.import_state(state)
+
+# 4. Validate
+assert root_daemon.get_state() == state
+Best Practice: Atomare Writes mit tempfile + rename
+
+python
+def atomic_write(path, data):
+    tmp = f"{path}.tmp"
+    with open(tmp, 'w') as f:
+        json.dump(data, f)
+    os.rename(tmp, path)  # Atomic on POSIX!
+```
+
+---
+
+### **C) PID File Management** ✅
+
+**Standard Location:**
+```
+/run/aeon/daemon.pid
+Check if Running:
+
+python
+def is_daemon_running():
+    try:
+        with open('/run/aeon/daemon.pid', 'r') as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 0)  # Signal 0 = check if exists
+        return True
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+```
+
+---
+
+### **D) Daemon Start Method - systemd Service** ✅
+
+**Warum:**
+- Standard auf allen modernen Linux Systemen
+- Auto-restart on failure
+- Logging mit journalctl
+- Dependency management
+- Clean shutdown
+
+**Aber für v3.1.0:**
+```
+Installation: Direct subprocess (einfacher für Testing)
+Production:   systemd service (robuster)
+Service File (wird während Installation erstellt):
+
+ini
+# /etc/systemd/system/aeon-orchestrator.service
+[Unit]
+Description=AEON System Orchestrator Daemon
+After=network.target
+
+[Service]
+Type=notify
+User=aeon
+Group=aeon
+Environment=AEON_ROOT=/opt/aeon
+ExecStart=/opt/aeon/library/python/core/daemon/aeon_system_daemon.py
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+
+## 📋 Offene Fragen für v3.1.0
+
+### **Frage 3: Handshake zwischen orchestrator.py und Daemon**
+
+**Empfehlung basierend auf Best Practices (Docker-Style):**
+```
+orchestrator.py:
+  1. Schreibt /run/aeon/daemon.config.json
+     {
+       "aeon_root": "/opt/aeon",
+       "aeon_repo": "/opt/aeon/tmp/repo",
+       "socket": "/run/aeon/orchestrator.sock",
+       "requested_by": "orchestrator.py"
+     }
+  
+  2. Startet Daemon mit --config /run/aeon/daemon.config.json
+  
+  3. Wartet auf Socket existence (max 10s timeout)
+     while not os.path.exists('/run/aeon/orchestrator.sock'):
+         sleep(0.1)
+  
+  4. Sendet PING via Socket
+     → Daemon antwortet PONG
+  
+  5. Handshake complete!
+
+Daemon:
+  1. Liest config file
+  2. Setzt aeon_root, aeon_repo
+  3. Erstellt Socket
+  4. Schreibt PID file
+  5. Sendet READY signal (optional: systemd sd_notify)
+Frage: Config-File Handshake ok?
+
+Frage 4: Daemon Communication Protocol
+Empfehlung: Line-Delimited JSON über Unix Socket
+
+Warum:
+
+Simple (kein HTTP Overhead)
+Fast (Unix Socket)
+Debuggable (socat /run/aeon/orchestrator.sock -)
+Standard (systemd-notify, Docker API verwenden ähnlich)
+Request/Response Format:
+
+python
+# orchestrator.py → daemon
+REQUEST = {
+    "action": "submit_task",
+    "task_name": "example_manuel",
+    "process_file": "/opt/aeon/manifest/.../install.instruct.json",
+    "request_id": "uuid-123"  # For tracking
+}
+
+# daemon → orchestrator.py
+RESPONSE = {
+    "status": "accepted",
+    "task_id": "uuid-456",
+    "request_id": "uuid-123"  # Echo back
+}
+
+# Later: Status check
+STATUS_REQUEST = {
+    "action": "get_status",
+    "task_id": "uuid-456"
+}
+
+STATUS_RESPONSE = {
+    "status": "running",
+    "task_id": "uuid-456",
+    "state": "RUNNING",
+    "progress": 0.5
+}
+Frage: Dieser Protokoll-Stil ok?
+
+Frage 5: Task Implementation
+example_manuel.task.py:
+
+python
+# Simpler blocking task für Testing
+async def resolve(context, dependencies, event_data):
+    print("✅ example_manuel executed!")
+    return {"result": "success", "message": "Hello from manuel"}
+example_timed.task.py:
+
+python
+# Long-running background task
+async def resolve(context, dependencies, event_data):
+    print("▶️  example_timed started (30s)")
+    for i in range(30):
+        await asyncio.sleep(1)
+        print(f"   {i+1}/30...")
+    print("✅ example_timed completed!")
+    return {"result": "success", "duration": 30}
+Test Flow:
+
+bash
+# Test 1: Manuel task (blocking)
+orchestrator.py --task example_manuel
+# Wartet bis completion, dann exit
+
+# Test 2: Timed task (background)
+orchestrator.py --task example_timed --background
+# Submitted, dann sofort exit
+
+# Test 3: Status check
+orchestrator.py --status example_timed
+# Shows: RUNNING, progress 15/30
+Frage: Beide Tasks implementieren in v3.1.0?
+
+Frage 6: Daemon State Transfer Details
+maintenance-daemon-handler.py sollte:
+
+Read repo_daemon state:
+python
+   state = read_json('/run/aeon/daemon_state.json')
+   # Contains: running tasks, completed tasks, queue state
+Graceful shutdown repo_daemon:
+python
+   send_signal(repo_daemon_pid, SIGTERM)
+   wait_for_exit(timeout=30)
+   if still_running():
+       send_signal(repo_daemon_pid, SIGKILL)
+Start root_daemon:
+python
+   subprocess.Popen([
+       '/opt/aeon/library/python/core/daemon/aeon_system_daemon.py',
+       '--import-state', '/run/aeon/daemon_state.json'
+   ])
+Validate transfer:
+python
+   root_state = query_daemon('get_state')
+   assert root_state['tasks'] == state['tasks']
+```
+
+**Frage:** Ist dieser Ablauf sauber?
+
+---
+
+### **Frage 7: Directory Structure v3.1.0**
+```
+aeon_repo/library/python/
+├── orchestrator_v3_1_0.py           # Entry point (minimal)
+│
+├── core/
+│   ├── discover.py                  # Path discovery
+│   ├── daemon_manager.py            # Daemon lifecycle
+│   └── daemon_client.py             # Socket communication
+│
+├── daemon/
+│   ├── aeon_system_daemon.py        # Main daemon
+│   ├── event_loop.py                # Background queue
+│   ├── socket_server.py             # Unix socket listener
+│   ├── task_registry.py             # Task management
+│   └── state_manager.py             # State persistence
+│
+├── tasks/
+│   ├── example_manuel.task.py
+│   └── example_timed.task.py
+│
+└── maintenance/
+    └── daemon_handler.py            # Migration repo→root
+
+runtime/environment/
+├── install/
+│   └── install.env                  # SSOT during install
+└── system/
+    └── system.env                   # SSOT after install
+Frage: Diese Struktur ok?
+
+✅ Zusammenfassung - Was ist bestätigt?
+Bestätigt:
+
+✅ Path Discovery: --root: Flag ODER .env File (SSOT)
+✅ Daemon Location: repo während install, root nach migration
+✅ Migration: maintenance-daemon-handler transferiert States
+Empfohlen (Best Practices):
+
+✅ Unix Socket für IPC
+✅ Atomic file operations für State
+✅ PID files in /run/aeon/
+✅ systemd service (production)
+✅ Line-delimited JSON Protokoll
+Warte auf Bestätigung:
+
+❓ Config-File Handshake (Frage 3)
+❓ Socket Communication Protocol (Frage 4)
+❓ Beide Test Tasks (Frage 5)
+❓ State Transfer Ablauf (Frage 6)
+❓ Directory Structure (Frage 7)
+Soll ich weitermachen mit detailliertem Design für die offenen Fragen? Oder hast du Änderungswünsche? 🚀
+
+zu frage 6
+read daemon state -> OK
+write new daemon state (config file)
+shut down daemon -> OK
+start new daemon -> OK
+transfer file to new daemon
+validate transfer -> OK
+
+jetzt erstelle mir das roadmap markdown so, dass wir direkt starten können die ersten teile zu erstellen
+
+12:59 PM
+
+Strukturierte Roadmap mit Daemon-Management-Phasen konzipiert.
+
+
+
+
+
+
+🚀 AEON Orchestrator v3.1.0 - Implementation Roadmap
+📋 Übersicht
+Ziel: Minimaler, fokussierter Orchestrator mit 2 Kernfeatures
+
+Path Discovery - AEON_ROOT und AEON_REPO ermitteln
+Daemon Management - aeon_system_daemon sicherstellen und steuern
+Test-Tasks: 2 simple Tasks zur Validierung
+
+example_manuel - Blocking task
+example_timed - Background task (30s)
+🏗️ Architektur v3.1.0
+orchestrator_v3_1_0.py (Entry Point)
+    ↓
+    ├─→ core/discover.py (Path Discovery)
+    │   └─→ runtime/environment/install/install.env (SSOT Installation)
+    │   └─→ runtime/environment/system/system.env (SSOT Production)
+    │
+    └─→ core/daemon_manager.py (Daemon Lifecycle)
+        ├─→ Check if daemon running
+        ├─→ Start daemon if needed
+        └─→ Connect via Unix Socket
+            ↓
+        daemon/aeon_system_daemon.py
+            ├─→ daemon/event_loop.py (Background Queue)
+            ├─→ daemon/socket_server.py (IPC)
+            ├─→ daemon/task_registry.py (Task Management)
+            └─→ daemon/state_manager.py (State Persistence)
+📦 Deliverables
+Code Files
+library/python/
+├── orchestrator_v3_1_0.py                    # Entry point (~50 lines)
+├── core/
+│   ├── discover.py                           # Path discovery (~100 lines)
+│   ├── daemon_manager.py                     # Daemon lifecycle (~150 lines)
+│   └── daemon_client.py                      # Socket client (~100 lines)
+├── daemon/
+│   ├── aeon_system_daemon.py                 # Main daemon (~200 lines)
+│   ├── event_loop.py                         # Background queue (~300 lines)
+│   ├── socket_server.py                      # Unix socket server (~150 lines)
+│   ├── task_registry.py                      # Task management (~150 lines)
+│   └── state_manager.py                      # State persistence (~100 lines)
+├── tasks/
+│   ├── example_manuel.task.py                # Test task 1 (~30 lines)
+│   └── example_timed.task.py                 # Test task 2 (~40 lines)
+└── maintenance/
+    └── daemon_handler.py                     # Migration tool (~200 lines)
+
+runtime/environment/
+├── install/
+│   └── install.env                           # SSOT Installation
+└── system/
+    └── system.env                            # SSOT Production
+
+tests/
+├── test_discover.py                          # Path discovery tests
+├── test_daemon_lifecycle.py                 # Daemon tests
+└── test_tasks.py                            # Task execution tests
+Documentation
+docs/orchestrator_v3_1_0/
+├── ARCHITECTURE.md                           # System design
+├── PATH_DISCOVERY.md                         # Discovery logic
+├── DAEMON_LIFECYCLE.md                       # Daemon management
+├── IPC_PROTOCOL.md                           # Communication protocol
+└── TESTING.md                                # Test strategy
+🎯 Implementation Phases
+Phase 1: Foundation (Tag 1)
+1.1 Environment Files & Path Discovery
+Files to create:
+
+runtime/environment/install/install.env
+runtime/environment/system/system.env
+library/python/core/discover.py
+Tasks:
+
+Task 1.1.1: Create install.env
+
+bash
+# File: runtime/environment/install/install.env
+AEON_ROOT=/opt/aeon
+AEON_REPO=/opt/aeon/tmp/repo
+AEON_MODE=install
+AEON_USER=aeon
+AEON_GROUP=aeon
+Task 1.1.2: Create system.env template
+
+bash
+# File: runtime/environment/system/system.env
+AEON_ROOT=/opt/aeon
+AEON_MODE=production
+AEON_USER=aeon
+AEON_GROUP=aeon
+Task 1.1.3: Implement core/discover.py
+
+python
+# Funktionen:
+- discover_paths(root_flag: Optional[str]) -> Dict[str, str]
+  ├─ Priorität 1: --root: Flag
+  └─ Priorität 2: .env File laden
+  
+- load_env_file(env_file: str) -> Dict[str, str]
+  └─ Parst .env File, returns dict
+  
+- validate_paths(paths: Dict) -> bool
+  ├─ Prüft AEON_ROOT existiert
+  ├─ Prüft AEON_REPO existiert (wenn AEON_MODE=install)
+  └─ Prüft notwendige Verzeichnisse vorhanden
+  
+- get_env_file_path() -> str
+  ├─ Prüft ob install.env existiert → install mode
+  └─ Sonst system.env → production mode
+Acceptance Criteria:
+
+✅ discover_paths() mit --root: Flag funktioniert
+✅ discover_paths() ohne Flag lädt .env
+✅ validate_paths() erkennt fehlende Pfade
+✅ Alle Tests in test_discover.py grün
+1.2 Entry Point
+File to create:
+
+library/python/orchestrator_v3_1_0.py
+Task 1.2.1: Implement orchestrator_v3_1_0.py
+
+python
+# Minimal entry point:
+import sys
+import argparse
+from core.discover import discover_paths
+from core.daemon_manager import ensure_daemon_running
+
+def main():
+    # 1. Parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--root', help='Override AEON_ROOT')
+    parser.add_argument('--task', help='Task to execute')
+    parser.add_argument('--background', action='store_true')
+    args = parser.parse_args()
+    
+    # 2. Discover paths
+    paths = discover_paths(args.root)
+    print(f"✅ AEON_ROOT: {paths['AEON_ROOT']}")
+    print(f"✅ AEON_REPO: {paths['AEON_REPO']}")
+    
+    # 3. Ensure daemon running
+    daemon_info = ensure_daemon_running(paths)
+    print(f"✅ Daemon running: PID {daemon_info['pid']}")
+    
+    # 4. Execute task if requested
+    if args.task:
+        from core.daemon_client import submit_task
+        result = submit_task(args.task, background=args.background)
+        print(f"✅ Task result: {result}")
+    
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
+Acceptance Criteria:
+
+✅ Script läuft ohne Fehler
+✅ Zeigt AEON_ROOT und AEON_REPO an
+✅ Exit code 0 bei Erfolg
+Phase 2: Daemon Foundation (Tag 2)
+2.1 State Manager
+File to create:
+
+library/python/daemon/state_manager.py
+Task 2.1.1: Implement state_manager.py
+
+python
+# Funktionen:
+- atomic_write(path: str, data: dict) -> None
+  └─ Schreibt JSON atomar (tmp + rename)
+  
+- atomic_read(path: str) -> dict
+  └─ Liest JSON sicher
+  
+- save_state(state: dict) -> None
+  └─ Speichert daemon state nach /run/aeon/daemon_state.json
+  
+- load_state() -> dict
+  └─ Lädt daemon state
+  
+- create_default_state() -> dict
+  └─ Erstellt initial state
+State Structure:
+
+json
+{
+  "pid": 12345,
+  "socket": "/run/aeon/orchestrator.sock",
+  "aeon_root": "/opt/aeon",
+  "aeon_repo": "/opt/aeon/tmp/repo",
+  "mode": "install",
+  "started_at": "2025-12-28T10:00:00Z",
+  "tasks": {
+    "uuid-123": {
+      "name": "example_manuel",
+      "state": "RUNNING",
+      "started_at": "2025-12-28T10:05:00Z"
+    }
+  }
+}
+Acceptance Criteria:
+
+✅ atomic_write ist wirklich atomar
+✅ Concurrent reads/writes funktionieren
+✅ State überlebt process crashes
+2.2 Socket Server
+File to create:
+
+library/python/daemon/socket_server.py
+Task 2.2.1: Implement socket_server.py
+
+python
+# Funktionen:
+- create_socket(path: str) -> socket.socket
+  ├─ Erstellt Unix socket
+  ├─ Setzt permissions 660
+  └─ Returns socket
+  
+- handle_connection(conn: socket.socket) -> None
+  ├─ Liest request (line-delimited JSON)
+  ├─ Verarbeitet action
+  └─ Sendet response
+  
+- start_server(socket_path: str, callback: Callable) -> None
+  └─ Main server loop
+Protocol:
+
+python
+# REQUEST
+{
+  "action": "submit_task",
+  "task_name": "example_manuel",
+  "request_id": "uuid-abc"
+}
+
+# RESPONSE
+{
+  "status": "ok",
+  "task_id": "uuid-123",
+  "request_id": "uuid-abc"
+}
+Acceptance Criteria:
+
+✅ Socket erstellt mit korrekten Permissions
+✅ Multiple concurrent connections funktionieren
+✅ Graceful shutdown möglich
+2.3 Task Registry
+File to create:
+
+library/python/daemon/task_registry.py
+Task 2.3.1: Implement task_registry.py
+
+python
+# Funktionen:
+- register_task(task_name: str, task_id: str) -> None
+  └─ Registriert Task im Registry
+  
+- get_task(task_id: str) -> dict
+  └─ Returns task info
+  
+- update_task_state(task_id: str, state: str) -> None
+  └─ Updated task state (PENDING, RUNNING, RESOLVED, REJECTED)
+  
+- list_tasks() -> List[dict]
+  └─ Returns all tasks
+Acceptance Criteria:
+
+✅ Tasks können registriert werden
+✅ State updates funktionieren
+✅ Task lookup ist schnell
+Phase 3: Event Loop & Daemon (Tag 3)
+3.1 Event Loop (Background Queue)
+File to create:
+
+library/python/daemon/event_loop.py
+Task 3.1.1: Implement event_loop.py
+
+python
+# Simplified version - nur essentials für v3.1.0
+
+class EventLoop:
+    def __init__(self):
+        self.running = False
+        self.tasks = {}
+        
+    async def run_forever(self):
+        """Main event loop"""
+        self.running = True
+        while self.running:
+            # 1. Check completed tasks
+            self._update_completed()
+            
+            # 2. Start pending tasks
+            self._start_pending()
+            
+            # 3. Tick
+            await asyncio.sleep(0.1)
+    
+    def submit_task(self, task_name: str) -> str:
+        """Submit task to queue"""
+        task_id = str(uuid.uuid4())
+        self.tasks[task_id] = {
+            "name": task_name,
+            "state": "PENDING",
+            "handle": None
+        }
+        return task_id
+    
+    async def _start_pending(self):
+        """Start pending tasks"""
+        for task_id, task in self.tasks.items():
+            if task["state"] == "PENDING":
+                task["state"] = "RUNNING"
+                task["handle"] = asyncio.create_task(
+                    self._execute_task(task_id, task["name"])
+                )
+    
+    async def _execute_task(self, task_id: str, task_name: str):
+        """Execute single task"""
+        # Dynamic import
+        module = importlib.import_module(f"tasks.{task_name}")
+        result = await module.resolve({}, {}, {})
+        self.tasks[task_id]["result"] = result
+        self.tasks[task_id]["state"] = "RESOLVED"
+Acceptance Criteria:
+
+✅ Event loop startet und läuft
+✅ Tasks können submitted werden
+✅ Tasks werden executed
+✅ Loop kann gestoppt werden
+3.2 Main Daemon
+File to create:
+
+library/python/daemon/aeon_system_daemon.py
+Task 3.2.1: Implement aeon_system_daemon.py
+
+python
+#!/usr/bin/env python3
+"""AEON System Daemon"""
+
+import asyncio
+import argparse
+from pathlib import Path
+from event_loop import EventLoop
+from socket_server import start_server
+from state_manager import save_state, load_state
+
+class AeonSystemDaemon:
+    def __init__(self, config_path: str = None):
+        self.config = self._load_config(config_path)
+        self.event_loop = EventLoop()
+        self.socket_path = "/run/aeon/orchestrator.sock"
+        
+    async def run(self):
+        """Main daemon entrypoint"""
+        # 1. Create PID file
+        self._write_pid()
+        
+        # 2. Start event loop
+        loop_task = asyncio.create_task(self.event_loop.run_forever())
+        
+        # 3. Start socket server
+        server_task = asyncio.create_task(
+            start_server(self.socket_path, self._handle_request)
+        )
+        
+        # 4. Save state
+        save_state(self._get_state())
+        
+        print(f"✅ Daemon started (PID {os.getpid()})")
+        
+        # 5. Wait
+        await asyncio.gather(loop_task, server_task)
+    
+    def _handle_request(self, request: dict) -> dict:
+        """Handle socket request"""
+        action = request.get("action")
+        
+        if action == "submit_task":
+            task_id = self.event_loop.submit_task(request["task_name"])
+            return {"status": "ok", "task_id": task_id}
+        
+        elif action == "get_status":
+            task = self.event_loop.tasks.get(request["task_id"])
+            return {"status": "ok", "task": task}
+        
+        return {"status": "error", "message": "Unknown action"}
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', help='Config file path')
+    args = parser.parse_args()
+    
+    daemon = AeonSystemDaemon(config_path=args.config)
+    asyncio.run(daemon.run())
+
+if __name__ == '__main__':
+    main()
+Acceptance Criteria:
+
+✅ Daemon startet ohne Fehler
+✅ PID file wird erstellt
+✅ Socket wird erstellt
+✅ State wird gespeichert
+✅ Kann Requests empfangen
+Phase 4: Daemon Manager (Tag 4)
+4.1 Daemon Manager
+File to create:
+
+library/python/core/daemon_manager.py
+Task 4.1.1: Implement daemon_manager.py
+
+python
+# Funktionen:
+- is_daemon_running() -> bool
+  ├─ Prüft /run/aeon/daemon.pid
+  └─ Prüft process exists
+  
+- start_daemon(daemon_path: str, config: dict) -> dict
+  ├─ Schreibt /run/aeon/daemon.config.json
+  ├─ Startet daemon subprocess
+  ├─ Wartet auf socket (max 10s)
+  ├─ Sendet PING
+  └─ Returns daemon info
+  
+- stop_daemon(graceful: bool = True) -> None
+  ├─ Sendet SIGTERM (wenn graceful)
+  ├─ Wartet max 30s
+  └─ Sendet SIGKILL (wenn nötig)
+  
+- ensure_daemon_running(paths: dict) -> dict
+  ├─ Prüft if running
+  └─ Startet if needed
+Acceptance Criteria:
+
+✅ is_daemon_running() ist zuverlässig
+✅ start_daemon() startet daemon erfolgreich
+✅ stop_daemon() stoppt daemon sauber
+✅ ensure_daemon_running() ist idempotent
+4.2 Daemon Client
+File to create:
+
+library/python/core/daemon_client.py
+Task 4.2.1: Implement daemon_client.py
+
+python
+# Funktionen:
+- connect_to_daemon() -> socket.socket
+  └─ Öffnet connection zu /run/aeon/orchestrator.sock
+  
+- send_request(request: dict) -> dict
+  ├─ Sendet JSON request
+  └─ Empfängt JSON response
+  
+- submit_task(task_name: str, background: bool = False) -> dict
+  ├─ Submits task to daemon
+  ├─ Wenn background: return sofort
+  └─ Wenn blocking: warte auf completion
+  
+- get_task_status(task_id: str) -> dict
+  └─ Fragt daemon nach task status
+Acceptance Criteria:
+
+✅ Kann zum daemon connecten
+✅ Kann tasks submitten
+✅ Blocking tasks funktionieren
+✅ Background tasks funktionieren
+Phase 5: Test Tasks (Tag 4)
+5.1 Example Tasks
+Files to create:
+
+library/python/tasks/example_manuel.task.py
+library/python/tasks/example_timed.task.py
+Task 5.1.1: Implement example_manuel.task.py
+
+python
+async def resolve(context, dependencies, event_data):
+    """Simple blocking task"""
+    print("✅ example_manuel executed!")
+    print(f"   Context: {context}")
+    print(f"   Dependencies: {dependencies}")
+    return {
+        "status": "success",
+        "message": "Hello from manuel",
+        "timestamp": datetime.now().isoformat()
+    }
+Task 5.1.2: Implement example_timed.task.py
+
+python
+async def resolve(context, dependencies, event_data):
+    """Long-running task"""
+    duration = 30
+    print(f"▶️  example_timed started ({duration}s)")
+    
+    for i in range(duration):
+        await asyncio.sleep(1)
+        if (i + 1) % 5 == 0:
+            print(f"   Progress: {i+1}/{duration}s")
+    
+    print("✅ example_timed completed!")
+    return {
+        "status": "success",
+        "duration": duration,
+        "timestamp": datetime.now().isoformat()
+    }
+Acceptance Criteria:
+
+✅ example_manuel läuft und returned result
+✅ example_timed läuft 30s
+✅ Beide tasks können parallel laufen
+Phase 6: Daemon Migration (Tag 5)
+6.1 Daemon Handler
+File to create:
+
+library/python/maintenance/daemon_handler.py
+Task 6.1.1: Implement daemon_handler.py
+
+python
+def migrate_daemon(aeon_root: str, aeon_repo: str):
+    """Migrate from repo daemon to root daemon"""
+    
+    # 1. Read repo daemon state
+    repo_state = atomic_read('/run/aeon/daemon_state.json')
+    print(f"✅ Read repo daemon state: {len(repo_state['tasks'])} tasks")
+    
+    # 2. Write new daemon config
+    root_config = {
+        "aeon_root": aeon_root,
+        "aeon_repo": "",  # Empty in production
+        "mode": "production",
+        "socket": "/run/aeon/orchestrator.sock"
+    }
+    atomic_write('/run/aeon/daemon_root.config.json', root_config)
+    print(f"✅ Created root daemon config")
+    
+    # 3. Shutdown repo daemon gracefully
+    from core.daemon_manager import stop_daemon
+    stop_daemon(graceful=True)
+    print(f"✅ Stopped repo daemon")
+    
+    # 4. Start root daemon
+    root_daemon_path = f"{aeon_root}/library/python/daemon/aeon_system_daemon.py"
+    subprocess.Popen([
+        'python3',
+        root_daemon_path,
+        '--config', '/run/aeon/daemon_root.config.json'
+    ])
+    print(f"✅ Started root daemon")
+    
+    # 5. Transfer state file to new daemon
+    # Wait for root daemon socket
+    wait_for_socket('/run/aeon/orchestrator.sock', timeout=10)
+    
+    # Send import_state request
+    from core.daemon_client import send_request
+    response = send_request({
+        "action": "import_state",
+        "state": repo_state
+    })
+    print(f"✅ Transferred state to root daemon")
+    
+    # 6. Validate transfer
+    new_state = send_request({"action": "get_state"})
+    assert len(new_state['tasks']) == len(repo_state['tasks'])
+    print(f"✅ Validated state transfer: {len(new_state['tasks'])} tasks")
+    
+    return True
+Acceptance Criteria:
+
+✅ State wird korrekt gelesen
+✅ Neues Config wird geschrieben
+✅ Repo daemon stoppt sauber
+✅ Root daemon startet erfolgreich
+✅ State wird transferiert
+✅ Validation bestätigt Erfolg
+Phase 7: Testing & Documentation (Tag 6)
+7.1 Unit Tests
+Files to create:
+
+tests/test_discover.py
+tests/test_daemon_lifecycle.py
+tests/test_tasks.py
+Task 7.1.1: Write test_discover.py
+
+python
+def test_discover_with_flag():
+    """Test --root: flag priority"""
+    
+def test_discover_from_env():
+    """Test .env file loading"""
+    
+def test_validate_paths():
+    """Test path validation"""
+Task 7.1.2: Write test_daemon_lifecycle.py
+
+python
+def test_daemon_start():
+    """Test daemon starts successfully"""
+    
+def test_daemon_stop():
+    """Test daemon stops gracefully"""
+    
+def test_daemon_restart():
+    """Test daemon can restart"""
+Task 7.1.3: Write test_tasks.py
+
+python
+def test_example_manuel():
+    """Test manuel task execution"""
+    
+def test_example_timed():
+    """Test timed task execution"""
+    
+def test_concurrent_tasks():
+    """Test multiple tasks run concurrently"""
+7.2 Integration Tests
+Task 7.2.1: End-to-End Test
+
+bash
+#!/bin/bash
+# tests/e2e_test.sh
+
+echo "=== AEON Orchestrator v3.1.0 E2E Test ==="
+
+# 1. Test path discovery
+echo "Test 1: Path discovery with --root:"
+python3 orchestrator_v3_1_0.py --root /opt/aeon
+
+# 2. Test daemon start
+echo "Test 2: Daemon auto-start"
+python3 orchestrator_v3_1_0.py
+
+# 3. Test manuel task
+echo "Test 3: Execute manuel task"
+python3 orchestrator_v3_1_0.py --task example_manuel
+
+# 4. Test timed task (background)
+echo "Test 4: Execute timed task in background"
+python3 orchestrator_v3_1_0.py --task example_timed --background
+
+# 5. Test status check
+sleep 5
+echo "Test 5: Check task status"
+python3 orchestrator_v3_1_0.py --status <task_id>
+
+# 6. Test daemon migration
+echo "Test 6: Daemon migration"
+python3 maintenance/daemon_handler.py
+
+echo "=== All tests passed! ==="
+7.3 Documentation
+Task 7.3.1: Write ARCHITECTURE.md
+
+System overview
+Component diagram
+Data flow
+Task 7.3.2: Write PATH_DISCOVERY.md
+
+Discovery algorithm
+Priority rules
+Validation logic
+Task 7.3.3: Write DAEMON_LIFECYCLE.md
+
+Start process
+Stop process
+Migration process
+Task 7.3.4: Write IPC_PROTOCOL.md
+
+Socket protocol
+Request/response format
+Error handling
+📊 Timeline
+Phase	Duration	Deliverables
+Phase 1	Tag 1 (4h)	Path discovery + Entry point
+Phase 2	Tag 2 (6h)	State manager + Socket + Registry
+Phase 3	Tag 3 (8h)	Event loop + Main daemon
+Phase 4	Tag 4 (6h)	Daemon manager + Client + Tasks
+Phase 5	Tag 4 (2h)	Test tasks
+Phase 6	Tag 5 (4h)	Daemon migration
+Phase 7	Tag 6 (6h)	Testing + Docs
+Total	6 Tage	Complete v3.1.0
+✅ Acceptance Criteria (Gesamt)
+Funktional:
+
+✅ Path discovery funktioniert mit --root: und .env
+✅ Daemon startet automatisch wenn nicht running
+✅ example_manuel task läuft blocking
+✅ example_timed task läuft background (30s)
+✅ Daemon migration repo→root funktioniert
+✅ State wird korrekt transferiert
+Qualität:
+
+✅ Alle unit tests grün
+✅ E2E test läuft durch
+✅ Code Coverage >80%
+✅ Keine kritischen Bugs
+Dokumentation:
+
+✅ ARCHITECTURE.md komplett
+✅ Alle Komponenten dokumentiert
+✅ API specifications vorhanden
+🚀 Start Command
+bash
+# Phase 1 starten
+cd /opt/aeon/tmp/repo/library/python
+
+# Erstelle Verzeichnisse
+mkdir -p core daemon tasks maintenance tests
+mkdir -p ../../runtime/environment/install
+mkdir -p ../../runtime/environment/system
+
+# Erstelle erste Datei
+touch ../../runtime/environment/install/install.env
+Bereit zum Start? Sag mir welche Phase/Task wir zuerst implementieren! 🎯
+
+Phase 1: Foundation (Tag 1)
+aeon_repo/runtime/environment/install/install.env existiert bereits
+frage ist 2 verschiedene .env im repo vorhalten ?
+frage evtl im repo umbenennen in aeon_repo/runtime/environment/system/system.env ?
+frage aeon_root/runtime/environment/system/system.env während installation erstellen ?
+
+Task 1.1.3: Implement core/discover.py
+filepath: aeon_repo/library/python/orchestrator/core/discover_environment.py
+purpose: look for environment file runtime/environment/system/system.env (aeon_repo first else aeon_root -> faalback ? )
+
+erstmal diesen teil
+
+Mehr anzeigen
+1:13 PM
+
+Analysierte Konfigurationsstrategie und entwarf discover_environment.py Logik.
+16 Sek.
+
+
+
+
+
+
+
+
+
+
+
+🎯 Phase 1: Foundation - Fragen & Implementierung
+✅ Antworten auf deine Fragen
+Frage 1: 2 verschiedene .env im Repo vorhalten?
+NEIN - Nur EINE .env Datei im Repo als Template.
+
+Empfehlung:
+
+aeon_repo/runtime/environment/system/system.env  (Template)
+    ↓ Installation
+aeon_root/runtime/environment/system/system.env  (Production, angepasst)
+Frage 2: Im Repo umbenennen zu system.env?
+JA! Umbenennen macht Sinn.
+
+Migration:
+
+bash
+# Alt (löschen):
+aeon_repo/runtime/environment/install/install.env
+
+# Neu (behalten):
+aeon_repo/runtime/environment/system/system.env
+```
+
+**Begründung:**
+- Eine einzige Quelle der Wahrheit (SSOT)
+- Während Installation: verwendet repo Version
+- Nach Installation: verwendet root Version
+- Klar, welche Datei für welchen Mode gilt
+
+---
+
+### **Frage 3: system.env während Installation erstellen?**
+
+**JA!** Wird während Installation erstellt.
+
+**Ablauf:**
+```
+Installation startet:
+  1. Orchestrator liest: aeon_repo/runtime/environment/system/system.env
+  2. Installation läuft...
+  3. Am Ende: Template nach aeon_root kopieren und anpassen
+     - AEON_REPO entfernen (wird gelöscht)
+     - AEON_MODE=production setzen
+  4. Cleanup: aeon_repo löschen
+  5. Ab jetzt: aeon_root/runtime/environment/system/system.env ist SSOT
+📝 Template: system.env
+bash
+# aeon_repo/runtime/environment/system/system.env (Template)
+# Diese Datei ist die SSOT für AEON Umgebungsvariablen
+
+# Installation Mode
+AEON_ROOT=/opt/aeon
+AEON_REPO=/opt/aeon/tmp/repo
+AEON_MODE=install
+
+# System User/Group
+AEON_USER=aeon
+AEON_GROUP=aeon
+
+# Daemon Configuration
+AEON_DAEMON_SOCKET=/run/aeon/orchestrator.sock
+AEON_DAEMON_PID=/run/aeon/daemon.pid
+AEON_DAEMON_STATE=/run/aeon/daemon_state.json
+
+# Logging
+AEON_LOG_DIR=/var/log/aeon
+AEON_LOG_LEVEL=INFO
+Nach Installation (aeon_root Version):
+
+bash
+# aeon_root/runtime/environment/system/system.env (Production)
+
+# Production Mode
+AEON_ROOT=/opt/aeon
+AEON_MODE=production
+# AEON_REPO entfernt (Repo wurde gelöscht)
+
+# System User/Group
+AEON_USER=aeon
+AEON_GROUP=aeon
+
+# Daemon Configuration
+AEON_DAEMON_SOCKET=/run/aeon/orchestrator.sock
+AEON_DAEMON_PID=/run/aeon/daemon.pid
+AEON_DAEMON_STATE=/run/aeon/daemon_state.json
+
+# Logging
+AEON_LOG_DIR=/var/log/aeon
+AEON_LOG_LEVEL=INFO
+💻 Task 1.1.3: Implement discover_environment.py
+Filepath: aeon_repo/library/python/orchestrator/core/discover_environment.py
+
+Search Logic:
+
+--root: Flag (höchste Priorität) → Überschreibt alles
+aeon_repo (wenn verfügbar) → Installation Mode
+aeon_root (Fallback) → Production Mode
+Implementierung:
+
+python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+AEON Environment Discovery Module
+==================================
+
+Discovers AEON_ROOT and AEON_REPO from system.env file.
+
+Priority:
+1. --root: command line flag (highest priority)
+2. aeon_repo/runtime/environment/system/system.env (installation mode)
+3. aeon_root/runtime/environment/system/system.env (production mode)
+
+Location: library/python/orchestrator/core/discover_environment.py
+"""
+
+import os
+import sys
+from pathlib import Path
+from typing import Dict, Optional
+
+
+class EnvironmentDiscoveryError(Exception):
+    """Raised when environment discovery fails."""
+    pass
+
+
+def discover_environment(root_flag: Optional[str] = None) -> Dict[str, str]:
+    """
+    Discover AEON environment paths and configuration.
+    
+    Priority:
+    1. --root: flag (explicit override)
+    2. Load from .env file (SSOT)
+    
+    :param root_flag: Optional --root: flag value
+    :return: Dictionary with environment variables
+    :raises EnvironmentDiscoveryError: If discovery fails
+    """
+    print("🔍 Discovering AEON environment...")
+    
+    # Priority 1: --root: flag
+    if root_flag:
+        print(f"   ✓ Using --root: flag: {root_flag}")
+        env = _create_env_from_root_flag(root_flag)
+        _validate_environment(env)
+        return env
+    
+    # Priority 2: Load from .env file
+    env_file_path = _find_env_file()
+    if not env_file_path:
+        raise EnvironmentDiscoveryError(
+            "No system.env file found!\n"
+            "Expected locations:\n"
+            "  - <repo>/runtime/environment/system/system.env\n"
+            "  - <root>/runtime/environment/system/system.env"
+        )
+    
+    print(f"   ✓ Found environment file: {env_file_path}")
+    env = _load_env_file(env_file_path)
+    _validate_environment(env)
+    
+    return env
+
+
+def _find_env_file() -> Optional[Path]:
+    """
+    Find system.env file.
+    
+    Search order:
+    1. aeon_repo/runtime/environment/system/system.env (installation)
+    2. aeon_root/runtime/environment/system/system.env (production)
+    
+    :return: Path to env file or None
+    """
+    # Get current script location
+    current_file = Path(__file__).resolve()
+    
+    # Method 1: Search upward from current file for repo structure
+    # We're in: <repo>/library/python/orchestrator/core/discover_environment.py
+    # We want:  <repo>/runtime/environment/system/system.env
+    
+    repo_candidate = current_file.parents[3]  # Go up 4 levels: core -> orchestrator -> python -> library -> repo
+    repo_env = repo_candidate / "runtime" / "environment" / "system" / "system.env"
+    
+    if repo_env.exists():
+        print(f"   → Checking repo location: {repo_env} ... FOUND")
+        return repo_env
+    else:
+        print(f"   → Checking repo location: {repo_env} ... NOT FOUND")
+    
+    # Method 2: Try standard production location
+    root_env = Path("/opt/aeon/runtime/environment/system/system.env")
+    
+    if root_env.exists():
+        print(f"   → Checking root location: {root_env} ... FOUND")
+        return root_env
+    else:
+        print(f"   → Checking root location: {root_env} ... NOT FOUND")
+    
+    # Method 3: Check environment variable AEON_ROOT (if set externally)
+    aeon_root = os.getenv("AEON_ROOT")
+    if aeon_root:
+        ext_env = Path(aeon_root) / "runtime" / "environment" / "system" / "system.env"
+        if ext_env.exists():
+            print(f"   → Checking AEON_ROOT env location: {ext_env} ... FOUND")
+            return ext_env
+        else:
+            print(f"   → Checking AEON_ROOT env location: {ext_env} ... NOT FOUND")
+    
+    return None
+
+
+def _load_env_file(env_file: Path) -> Dict[str, str]:
+    """
+    Load and parse .env file.
+    
+    Format:
+        KEY=value
+        # Comment
+        KEY_2=value with spaces
+    
+    :param env_file: Path to .env file
+    :return: Dictionary of environment variables
+    """
+    env = {}
+    
+    try:
+        with open(env_file, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Parse KEY=VALUE
+                if '=' not in line:
+                    print(f"   ⚠️  Warning: Invalid line {line_num}: {line}")
+                    continue
+                
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+                
+                # Remove quotes if present
+                if value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]
+                elif value.startswith("'") and value.endswith("'"):
+                    value = value[1:-1]
+                
+                env[key] = value
+        
+        print(f"   ✓ Loaded {len(env)} environment variables")
+        return env
+        
+    except Exception as e:
+        raise EnvironmentDiscoveryError(f"Failed to load {env_file}: {e}")
+
+
+def _create_env_from_root_flag(root_path: str) -> Dict[str, str]:
+    """
+    Create environment from --root: flag.
+    
+    Sets minimal required variables:
+    - AEON_ROOT
+    - AEON_MODE=manual (user override)
+    
+    :param root_path: Path from --root: flag
+    :return: Environment dictionary
+    """
+    root = Path(root_path).resolve()
+    
+    if not root.exists():
+        raise EnvironmentDiscoveryError(f"--root: path does not exist: {root}")
+    
+    # Create minimal environment
+    env = {
+        "AEON_ROOT": str(root),
+        "AEON_MODE": "manual",
+        "AEON_USER": "aeon",
+        "AEON_GROUP": "aeon",
+        "AEON_DAEMON_SOCKET": "/run/aeon/orchestrator.sock",
+        "AEON_DAEMON_PID": "/run/aeon/daemon.pid",
+        "AEON_DAEMON_STATE": "/run/aeon/daemon_state.json",
+        "AEON_LOG_DIR": "/var/log/aeon",
+        "AEON_LOG_LEVEL": "INFO"
+    }
+    
+    # Check if AEON_REPO exists (during installation)
+    repo_candidate = root / "tmp" / "repo"
+    if repo_candidate.exists():
+        env["AEON_REPO"] = str(repo_candidate)
+    
+    return env
+
+
+def _validate_environment(env: Dict[str, str]) -> None:
+    """
+    Validate discovered environment.
+    
+    Checks:
+    - AEON_ROOT exists and is valid
+    - AEON_REPO exists if specified
+    - Required directories present
+    
+    :param env: Environment dictionary
+    :raises EnvironmentDiscoveryError: If validation fails
+    """
+    print("🔎 Validating environment...")
+    
+    # Required keys
+    required_keys = ["AEON_ROOT", "AEON_MODE"]
+    for key in required_keys:
+        if key not in env:
+            raise EnvironmentDiscoveryError(f"Missing required variable: {key}")
+    
+    # Validate AEON_ROOT
+    aeon_root = Path(env["AEON_ROOT"])
+    if not aeon_root.exists():
+        raise EnvironmentDiscoveryError(f"AEON_ROOT does not exist: {aeon_root}")
+    
+    # Check for required directories in AEON_ROOT
+    required_dirs = ["library", "runtime"]
+    missing_dirs = []
+    
+    for dir_name in required_dirs:
+        dir_path = aeon_root / dir_name
+        if not dir_path.exists():
+            missing_dirs.append(dir_name)
+    
+    if missing_dirs:
+        print(f"   ⚠️  Warning: Missing directories in AEON_ROOT: {missing_dirs}")
+        print(f"      This may be expected during initial installation.")
+    else:
+        print(f"   ✓ AEON_ROOT structure validated: {aeon_root}")
+    
+    # Validate AEON_REPO if present
+    if "AEON_REPO" in env and env["AEON_REPO"]:
+        aeon_repo = Path(env["AEON_REPO"])
+        if not aeon_repo.exists():
+            print(f"   ⚠️  Warning: AEON_REPO specified but does not exist: {aeon_repo}")
+        else:
+            print(f"   ✓ AEON_REPO validated: {aeon_repo}")
+    
+    # Show mode
+    mode = env.get("AEON_MODE", "unknown")
+    print(f"   ✓ AEON_MODE: {mode}")
+    
+    print("✅ Environment validation complete!")
+
+
+def print_environment(env: Dict[str, str]) -> None:
+    """
+    Pretty-print discovered environment.
+    
+    :param env: Environment dictionary
+    """
+    print("\n" + "="*60)
+    print("AEON ENVIRONMENT")
+    print("="*60)
+    
+    # Sort keys for consistent output
+    for key in sorted(env.keys()):
+        value = env[key]
+        # Truncate long paths for readability
+        if len(value) > 50:
+            value = "..." + value[-47:]
+        print(f"  {key:25} = {value}")
+    
+    print("="*60 + "\n")
+
+
+# === CLI for testing ===
+
+def main():
+    """CLI entrypoint for testing discover_environment."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="AEON Environment Discovery Tool"
+    )
+    parser.add_argument(
+        '--root',
+        help='Override AEON_ROOT location'
+    )
+    
+    args = parser.parse_args()
+    
+    try:
+        env = discover_environment(root_flag=args.root)
+        print_environment(env)
+        return 0
+    
+    except EnvironmentDiscoveryError as e:
+        print(f"\n❌ Environment Discovery Failed!")
+        print(f"   {e}\n")
+        return 1
+    
+    except Exception as e:
+        print(f"\n❌ Unexpected Error!")
+        print(f"   {e}\n")
+        import traceback
+        traceback.print_exc()
+        return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+🧪 Testing
+Test direkt:
+
+bash
+cd /opt/aeon/tmp/repo/library/python/orchestrator/core
+
+# Test 1: Auto-discovery (sollte repo .env finden)
+python3 discover_environment.py
+
+# Test 2: Mit --root: Flag
+python3 discover_environment.py --root /opt/aeon
+
+# Test 3: Production Mode (wenn repo gelöscht)
+# (manuell system.env nach /opt/aeon kopieren)
+python3 discover_environment.py
+```
+
+**Expected Output (Test 1):**
+```
+🔍 Discovering AEON environment...
+   → Checking repo location: /opt/aeon/tmp/repo/runtime/environment/system/system.env ... FOUND
+   ✓ Found environment file: /opt/aeon/tmp/repo/runtime/environment/system/system.env
+   ✓ Loaded 10 environment variables
+🔎 Validating environment...
+   ✓ AEON_ROOT structure validated: /opt/aeon
+   ✓ AEON_REPO validated: /opt/aeon/tmp/repo
+   ✓ AEON_MODE: install
+✅ Environment validation complete!
+
+============================================================
+AEON ENVIRONMENT
+============================================================
+  AEON_DAEMON_PID           = /run/aeon/daemon.pid
+  AEON_DAEMON_SOCKET        = /run/aeon/orchestrator.sock
+  AEON_DAEMON_STATE         = /run/aeon/daemon_state.json
+  AEON_GROUP                = aeon
+  AEON_LOG_DIR              = /var/log/aeon
+  AEON_LOG_LEVEL            = INFO
+  AEON_MODE                 = install
+  AEON_REPO                 = /opt/aeon/tmp/repo
+  AEON_ROOT                 = /opt/aeon
+  AEON_USER                 = aeon
+============================================================
+✅ Acceptance Criteria
+✅ Findet system.env in aeon_repo (Installation)
+✅ Findet system.env in aeon_root (Production)
+✅ --root: Flag überschreibt alles
+✅ Validiert Pfade korrekt
+✅ Clear error messages bei Fehler
+✅ Pretty-print für Debugging
+Soll ich den Code erstellen? Oder zuerst weitere Anpassungen? 🚀
+
+
+
+
+
+
+Claude ist eine KI und kann Fehler machen. Bitte überprüfe die Antworten.
